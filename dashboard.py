@@ -15,6 +15,7 @@ st.markdown("""
     * { font-family: 'Inter', sans-serif; }
     .stApp { background-color: #020617; }
     
+    /* Menu Lateral */
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label {
         background-color: #1e293b; border: 1px solid rgba(255, 255, 255, 0.05);
         padding: 10px 15px !important; border-radius: 8px !important;
@@ -24,14 +25,17 @@ st.markdown("""
         background: linear-gradient(135deg, #10b981 0%, #064e3b 100%) !important;
     }
 
+    /* Cards de Métricas Reduzidos */
+    .metric-container { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 15px; }
     .metric-card {
-        background: #1e293b; padding: 10px; border-radius: 10px;
+        background: #1e293b; padding: 12px; border-radius: 10px;
         text-align: center; border: 1px solid rgba(255,255,255,0.1);
-        display: flex; flex-direction: column; justify-content: center;
+        flex: 1; min-height: 70px; display: flex; flex-direction: column; justify-content: center;
     }
     .metric-title { color: #94a3b8; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; margin-bottom: 2px; }
     .metric-value { color: #10b981; font-size: 1.1rem; font-weight: 900; }
 
+    /* Calendário */
     .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; width: 100%; }
     .day-card { 
         background: #0f172a; border-radius: 8px; padding: 10px; 
@@ -39,6 +43,7 @@ st.markdown("""
     }
     .day-status { font-size: 0.75rem; font-weight: 600; color: #ffffff; text-align: right; }
 
+    /* Área 5 Porquês (Clara para caneta) */
     .five-why-box {
         border: 1px solid #000; border-radius: 5px; padding: 15px; 
         background: #ffffff; color: #000; margin-top: 10px;
@@ -189,8 +194,11 @@ if uploaded_file:
         df_sb = df_stops[(df_stops['Data'].dt.date >= periodo_b[0]) & (df_stops['Data'].dt.date <= periodo_b[1]) & 
                          (df_stops['Máquina'] == maq_b) & (df_stops['Turno'].isin(turno_b))]
 
+        # Título Dinâmico com Turnos
+        str_turnos = ", ".join(turno_b) if turno_b else "Nenhum"
         st.markdown(f"""<div style="text-align:center; border-bottom:3px solid #10b981; padding-bottom:10px; margin-bottom:15px;">
             <h1 style="color:white; margin:0;">RELATÓRIO SEMANAL DE PERFORMANCE - MÁQUINA {maq_b}</h1>
+            <h3 style="color:#10b981; margin:0;">TURNO(S): {str_turnos}</h3>
             <p style="color:#94a3b8; font-size:1rem;">Período: {periodo_b[0].strftime('%d/%m')} a {periodo_b[1].strftime('%d/%m/%Y')}</p></div>""", unsafe_allow_html=True)
 
         m_v = (df_b["Run Time"].sum()/df_b["Horário Padrão"].replace(0,1).sum()*100)
@@ -230,7 +238,12 @@ if uploaded_file:
             stop_imp = df_sb.groupby('Problema')['Minutos'].sum().sort_values(ascending=True).tail(5)
             if not stop_imp.empty:
                 pior_parada = stop_imp.index[-1]
-                fig_b = px.bar(stop_imp.reset_index(), x='Minutos', y='Problema', orientation='h', text_auto=True, color_discrete_sequence=['#10b981'])
+                total_min_p = df_sb['Minutos'].sum()
+                df_p_plot = stop_imp.reset_index()
+                df_p_plot['%'] = (df_p_plot['Minutos'] / total_min_p * 100).round(1)
+                df_p_plot['Label'] = df_p_plot.apply(lambda r: f"{r['Minutos']} min ({r['%']}%)", axis=1)
+                
+                fig_b = px.bar(df_p_plot, x='Minutos', y='Problema', orientation='h', text='Label', color_discrete_sequence=['#10b981'])
                 fig_b.update_layout(height=250, margin=dict(l=0,r=0,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', font={'color':'white'})
                 st.plotly_chart(fig_b, use_container_width=True)
             else:
