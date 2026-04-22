@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 # 1. CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(layout="wide", page_title="Industrial Analytics Hub", page_icon="⚙️")
 
-# --- ESTILIZAÇÃO CSS PREMIUM (FOCADA EM ESPAÇO E IMPRESSÃO) ---
+# --- ESTILIZAÇÃO CSS PREMIUM ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;900&display=swap');
@@ -51,15 +51,16 @@ st.markdown("""
     }
     .five-why-line { border-bottom: 1px solid #000; padding: 8px 0; font-size: 0.9rem; }
 
-    /* CONFIGURAÇÃO PARA IMPRESSÃO A4 PAISAGEM */
+    /* Mensagens de Feedback */
+    .feedback-box {
+        padding: 15px; border-radius: 10px; margin-bottom: 15px; text-align: center; font-weight: 700;
+    }
+
     @media print {
         @page { size: A4 landscape; margin: 1cm; }
         .stApp { background-color: white !important; color: black !important; }
-        [data-testid="stSidebar"], header, .stButton, div.stTooltipIcon { display: none !important; }
-        .metric-card { border: 1px solid black !important; background: white !important; margin-bottom: 5px !important; }
-        .metric-value, .metric-title, .day-number, .day-status { color: black !important; }
+        [data-testid="stSidebar"], header, div.stTooltipIcon { display: none !important; }
         .five-why-box { border: 2px solid black !important; }
-        .main .block-container { padding: 0 !important; }
     }
     </style>
     """, unsafe_allow_html=True)
@@ -83,8 +84,6 @@ def load_data(file_obj):
     df_order['Turno'] = df_order['Turno'].fillna(0).astype(int).astype(str)
     df_stops['Data'] = pd.to_datetime(df_stops['Data'], errors='coerce')
     df_stops['Máquina'] = df_stops['Máquina'].fillna(0).astype(int).astype(str)
-    df_stops['Turno'] = df_stops['Turno'].fillna(0).astype(int).astype(str)
-    
     return df_order, df_stops
 
 # --- MENU LATERAL ---
@@ -97,6 +96,19 @@ with st.sidebar:
 
 if uploaded_file:
     df_order, df_stops = load_data(uploaded_file)
+
+    # --- FUNÇÃO AUXILIAR VELOCÍMETRO PEQUENO ---
+    def mini_gauge(label, value, color, target):
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number", value=value,
+            number={'suffix': "%", 'font': {'size': 20}},
+            title={'text': label, 'font': {'size': 14}},
+            gauge={'axis': {'range': [0, 100]},
+                   'bar': {'color': color},
+                   'threshold': {'line': {'color': "white", 'width': 2}, 'value': target}}
+        ))
+        fig.update_layout(height=180, margin=dict(l=20, r=20, t=40, b=20), paper_bgcolor='rgba(0,0,0,0)', font={'color': "white"})
+        return fig
 
     # =========================================================
     # ABA 1: PERFORMANCE GERAL
@@ -129,14 +141,10 @@ if uploaded_file:
         hp_sum = df_f['Horário Padrão'].sum()
         with col1:
             val = (df_f['Run Time'].sum()/hp_sum*100) if hp_sum > 0 else 0
-            fig = go.Figure(go.Indicator(mode="gauge+number", value=val, title={'text': "Movimentação %"}, gauge={'bar':{'color':"#10b981"}, 'axis':{'range':[0,100]}, 'threshold':{'line':{'color':"white",'width':4},'value':85}}))
-            fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', font={'color':"white"})
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(mini_gauge("Movimentação (%)", val, "#10b981", 85), use_container_width=True)
         with col2:
             val_l = ((df_f['Machine Counter'].sum()-df_f['Peças Estoque - Ajuste'].sum())/df_f['Machine Counter'].sum()*100) if df_f['Machine Counter'].sum() > 0 else 0
-            fig2 = go.Figure(go.Indicator(mode="gauge+number", value=val_l, title={'text': "Loss %"}, gauge={'bar':{'color':"#e74c3c"}, 'axis':{'range':[0,15]}, 'threshold':{'line':{'color':"white",'width':4},'value':5}}))
-            fig2.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', font={'color':"white"})
-            st.plotly_chart(fig2, use_container_width=True)
+            st.plotly_chart(mini_gauge("Loss (%)", val_l, "#e74c3c", 5), use_container_width=True)
 
     # =========================================================
     # ABA 2: TOP 10 PARADAS
@@ -145,11 +153,10 @@ if uploaded_file:
         st.sidebar.subheader("Filtros Paradas")
         f_data_s = st.sidebar.date_input("Período", [df_stops['Data'].min(), df_stops['Data'].max()], key='p2')
         f_maq_s = st.sidebar.multiselect("Máquinas", sorted(df_stops['Máquina'].unique()), default=sorted(df_stops['Máquina'].unique()), key='m2')
-        f_turno_s = st.sidebar.multiselect("Turnos", sorted(df_order['Turno'].unique()), default=sorted(df_order['Turno'].unique()), key='t2')
         
-        df_s_f = df_stops[(df_stops['Data'].dt.date >= f_data_s[0]) & (df_stops['Data'].dt.date <= f_data_s[1]) & (df_stops['Máquina'].isin(f_maq_s)) & (df_stops['Turno'].isin(f_turno_s))]
+        df_s_f = df_stops[(df_stops['Data'].dt.date >= f_data_s[0]) & (df_stops['Data'].dt.date <= f_data_s[1]) & (df_stops['Máquina'].isin(f_maq_s))]
         
-        st.markdown("## 🛑 Top 10 Paradas")
+        st.markdown("## 🛑 Análise de Paradas")
         top_min = df_s_f.groupby('Problema')['Minutos'].sum().sort_values(ascending=True).tail(10)
         st.plotly_chart(px.bar(top_min, orientation='h', title="Minutos Totais", color_discrete_sequence=['#f43f5e']), use_container_width=True)
         
@@ -157,14 +164,11 @@ if uploaded_file:
         st.plotly_chart(px.bar(top_qtd, orientation='h', title="Frequência (Quantidade)", color_discrete_sequence=['#3b82f6']), use_container_width=True)
 
     # =========================================================
-    # ABA 3: CALENDÁRIO (FILTROS MÊS, MÁQUINA, TURNO)
+    # ABA 3: CALENDÁRIO
     # =========================================================
     elif menu == "📅 CALENDÁRIO":
         st.sidebar.subheader("Filtros Calendário")
-        # Correção do erro de data: Extração segura do Mês/Ano
         df_order['Mes_Ref'] = df_order['Data'].dt.month
-        df_order['Ano_Ref'] = df_order['Data'].dt.year
-        
         meses_lista = list(calendar.month_name)[1:]
         mes_sel = st.sidebar.selectbox("Mês", meses_lista, index=datetime.now().month-1)
         mes_idx = meses_lista.index(mes_sel) + 1
@@ -192,47 +196,74 @@ if uploaded_file:
         st.markdown(html + '</div>', unsafe_allow_html=True)
 
     # =========================================================
-    # ABA 4: ANÁLISE SEMANAL (IMPRESSÃO A4 PAISAGEM)
+    # ABA 4: ANÁLISE SEMANAL (Board de Impressão)
     # =========================================================
     elif menu == "📋 ANÁLISE SEMANAL":
-        st.sidebar.subheader("Configuração da Impressão")
-        maq_b = st.sidebar.selectbox("Máquina", sorted(df_order['Máquina'].unique()))
-        turno_b = st.sidebar.multiselect("Turnos", sorted(df_order['Turno'].unique()), default=sorted(df_order['Turno'].unique()))
+        st.sidebar.subheader("Filtros Board")
+        maq_b = st.sidebar.selectbox("Selecionar Máquina", sorted(df_order['Máquina'].unique()))
         periodo_b = st.sidebar.date_input("Período", [df_order['Data'].max() - timedelta(days=7), df_order['Data'].max()])
         
-        df_b = df_order[(df_order['Data'].dt.date >= periodo_b[0]) & (df_order['Data'].dt.date <= periodo_b[1]) & (df_order['Máquina'] == maq_b) & (df_order['Turno'].isin(turno_b))]
-        df_sb = df_stops[(df_stops['Data'].dt.date >= periodo_b[0]) & (df_stops['Data'].dt.date <= periodo_b[1]) & (df_stops['Máquina'] == maq_b) & (df_stops['Turno'].isin(turno_b))]
-
-        if st.button("🖨️ PREPARAR PARA IMPRIMIR"):
-            st.info("Pressione Ctrl+P e verifique se o destino é 'Salvar como PDF' em modo 'Paisagem'.")
+        # Dados filtrados para a máquina e para o ranking
+        df_b_all = df_order[(df_order['Data'].dt.date >= periodo_b[0]) & (df_order['Data'].dt.date <= periodo_b[1])]
+        df_b = df_b_all[df_b_all['Máquina'] == maq_b]
+        df_sb = df_stops[(df_stops['Data'].dt.date >= periodo_b[0]) & (df_stops['Data'].dt.date <= periodo_b[1]) & (df_stops['Máquina'] == maq_b)]
 
         st.markdown(f"""<div style="text-align:center; border-bottom:3px solid #10b981; padding-bottom:10px; margin-bottom:15px;">
             <h1 style="color:white; margin:0;">RELATÓRIO SEMANAL DE PERFORMANCE - MÁQUINA {maq_b}</h1>
             <p style="color:#94a3b8; font-size:1rem;">Período: {periodo_b[0].strftime('%d/%m')} a {periodo_b[1].strftime('%d/%m/%Y')}</p></div>""", unsafe_allow_html=True)
 
+        # Velocímetros e Peças
         m_v = (df_b["Run Time"].sum()/df_b["Horário Padrão"].replace(0,1).sum()*100)
         l_v = ((df_b["Machine Counter"].sum()-df_b["Peças Estoque - Ajuste"].sum())/df_b["Machine Counter"].replace(0,1).sum()*100)
-        
-        st.markdown(f"""<div class="metric-container">
-            <div class="metric-card"><div class="metric-title">Movimentação</div><div class="metric-value">{m_v:.1f}%</div></div>
-            <div class="metric-card"><div class="metric-title">Loss (Perda)</div><div class="metric-value">{l_v:.1f}%</div></div>
-            <div class="metric-card"><div class="metric-title">Peças Enviadas</div><div class="metric-value">{df_b["Peças Estoque - Ajuste"].sum():,.0f}</div></div>
-            <div class="metric-card"><div class="metric-title">Run Time Total</div><div class="metric-value">{df_b["Run Time"].sum():,.0f}m</div></div></div>""", unsafe_allow_html=True)
+        pecas_v = df_b["Peças Estoque - Ajuste"].sum()
 
-        # Gráfico de Paradas (5 Piores com Rótulos de Minutos e %)
-        stop_imp = df_sb.groupby('Problema')['Minutos'].sum().sort_values(ascending=True).tail(5)
-        if not stop_imp.empty:
-            pior_parada = stop_imp.index[-1]
-            total_min = df_sb['Minutos'].sum()
-            df_plot = stop_imp.reset_index()
-            df_plot['Perc'] = (df_plot['Minutos'] / total_min * 100).round(1)
-            df_plot['Label'] = df_plot.apply(lambda r: f"{r['Minutos']} min ({r['Perc']}%)", axis=1)
-            
-            fig_b = px.bar(df_plot, x='Minutos', y='Problema', orientation='h', text='Label', color_discrete_sequence=['#10b981'])
-            fig_b.update_layout(title="TOP 5 PARADAS DA SEMANA (Impacto %)", height=350, font=dict(size=12))
-            st.plotly_chart(fig_b, use_container_width=True)
+        v1, v2, v3 = st.columns([1, 1, 1])
+        with v1: st.plotly_chart(mini_gauge("Movimentação", m_v, "#10b981", 85), use_container_width=True)
+        with v2: st.plotly_chart(mini_gauge("Loss", l_v, "#e74c3c", 5), use_container_width=True)
+        with v3: st.markdown(f'<div class="metric-card" style="height:180px;"><div class="metric-title">Peças Enviadas</div><div class="metric-value" style="font-size:2.5rem;">{pecas_v:,.0f}</div></div>', unsafe_allow_html=True)
+
+        # Ranking e Mensagem de Feedback
+        st.markdown("---")
+        # Criar Ranking
+        rank_df = df_b_all.groupby('Máquina').agg({'Run Time':'sum','Horário Padrão':'sum'}).reset_index()
+        rank_df['Mov %'] = (rank_df['Run Time'] / rank_df['Horário Padrão'].replace(0,1) * 100).round(1)
+        rank_df = rank_df.sort_values('Mov %', ascending=False).reset_index(drop=True)
+        rank_df.index += 1 # Posição 1, 2, 3...
+        
+        posicao = rank_df[rank_df['Máquina'] == maq_b].index[0]
+        total_maqs = len(rank_df)
+
+        # Gerar Mensagem
+        if posicao <= 3:
+            msg = f"🌟 EXCELENTE! A Máquina {maq_b} está no TOP 3 (Posição: {posicao}º). Continue com esse nível de eficiência!"
+            cor_msg = "#064e3b"
+        elif posicao > (total_maqs - 3):
+            msg = f"💪 VAMOS LÁ! A Máquina {maq_b} está na posição {posicao}º. É hora de focar nos 5 Porquês e ajustar os detalhes para subir no ranking!"
+            cor_msg = "#7f1d1d"
         else:
-            pior_parada = "Nenhuma parada registrada"
+            msg = f"📈 BOM TRABALHO! A Máquina {maq_b} está na posição {posicao}º. Busque consistência para alcançar o Top 3!"
+            cor_msg = "#1e293b"
+
+        st.markdown(f'<div class="feedback-box" style="background:{cor_msg}; color:white;">{msg}</div>', unsafe_allow_html=True)
+
+        col_rank, col_stops = st.columns([1, 2])
+        
+        with col_rank:
+            st.markdown("🏆 **Ranking de Movimentação**")
+            def highlight_machine(s):
+                return ['background-color: #10b981' if s.Máquina == maq_b else '' for _ in s]
+            st.dataframe(rank_df[['Máquina', 'Mov %']].style.apply(highlight_machine, axis=1), hide_index=False, use_container_width=True)
+
+        with col_stops:
+            st.markdown("🛑 **Top 5 Paradas (Impacto %)**")
+            stop_imp = df_sb.groupby('Problema')['Minutos'].sum().sort_values(ascending=True).tail(5)
+            if not stop_imp.empty:
+                pior_parada = stop_imp.index[-1]
+                fig_b = px.bar(stop_imp/stop_imp.sum()*100, orientation='h', labels={'value':'% Impacto','Problema':''}, color_discrete_sequence=['#10b981'])
+                fig_b.update_layout(height=300, margin=dict(l=0,r=0,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', font={'color':'white'})
+                st.plotly_chart(fig_b, use_container_width=True)
+            else:
+                pior_parada = "Nenhuma parada registrada"
 
         # Área dos 5 Porquês
         st.markdown(f"""
