@@ -15,7 +15,6 @@ st.markdown("""
     * { font-family: 'Inter', sans-serif; }
     .stApp { background-color: #020617; }
     
-    /* Menu Lateral */
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label {
         background-color: #1e293b; border: 1px solid rgba(255, 255, 255, 0.05);
         padding: 10px 15px !important; border-radius: 8px !important;
@@ -25,17 +24,14 @@ st.markdown("""
         background: linear-gradient(135deg, #10b981 0%, #064e3b 100%) !important;
     }
 
-    /* Cards de Métricas Reduzidos */
-    .metric-container { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 15px; }
     .metric-card {
-        background: #1e293b; padding: 12px; border-radius: 10px;
+        background: #1e293b; padding: 10px; border-radius: 10px;
         text-align: center; border: 1px solid rgba(255,255,255,0.1);
-        flex: 1; min-height: 70px; display: flex; flex-direction: column; justify-content: center;
+        display: flex; flex-direction: column; justify-content: center;
     }
     .metric-title { color: #94a3b8; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; margin-bottom: 2px; }
     .metric-value { color: #10b981; font-size: 1.1rem; font-weight: 900; }
 
-    /* Calendário */
     .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; width: 100%; }
     .day-card { 
         background: #0f172a; border-radius: 8px; padding: 10px; 
@@ -43,13 +39,19 @@ st.markdown("""
     }
     .day-status { font-size: 0.75rem; font-weight: 600; color: #ffffff; text-align: right; }
 
-    /* Área 5 Porquês (Clara para caneta) */
     .five-why-box {
         border: 1px solid #000; border-radius: 5px; padding: 15px; 
         background: #ffffff; color: #000; margin-top: 10px;
     }
     .five-why-line { border-bottom: 1px dotted #000; padding: 10px 0; font-size: 0.9rem; }
     .feedback-box { padding: 12px; border-radius: 8px; margin-bottom: 10px; text-align: center; font-weight: 700; font-size: 0.9rem; }
+    
+    /* Estilo para as tabelas do Reporte Diário */
+    .section-header {
+        background: #1e293b; padding: 10px; border-radius: 5px;
+        color: #10b981; font-weight: 800; text-transform: uppercase;
+        margin-top: 20px; border-left: 5px solid #10b981; font-size: 0.9rem;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -73,15 +75,42 @@ def load_data(file_obj):
     df_stops['Data'] = pd.to_datetime(df_stops['Data'], errors='coerce')
     df_stops['Máquina'] = df_stops['Máquina'].fillna(0).astype(int).astype(str)
     df_stops['Turno'] = df_stops['Turno'].fillna(0).astype(int).astype(str)
+    
+    # Lógica de Categorização para o Reporte Diário
+    def categorize(m): return "BABY" if m in ['2', '3', '4', '5', '6'] else "ADULTO"
+    df_order['Categoria'] = df_order['Máquina'].apply(categorize)
+    
     return df_order, df_stops
+
+@st.cache_data
+def load_planner_metas(file, data_ref):
+    try:
+        xls = pd.ExcelFile(file)
+        target = next((s for s in xls.sheet_names if "PEÇAS" in s.upper()), None)
+        df_raw = pd.read_excel(file, sheet_name=target, header=None)
+        row_dates = df_raw.iloc[2, :].tolist()
+        row_meta = df_raw.iloc[124, :].tolist() # Linha 125 (index 124)
+        
+        meta_geral_mes = 0
+        meta_ate_hoje = 0
+        for col_idx, d_val in enumerate(row_dates):
+            if isinstance(d_val, (datetime, pd.Timestamp)):
+                valor = pd.to_numeric(row_meta[col_idx], errors='coerce') or 0
+                meta_geral_mes += valor
+                if d_val.date() <= data_ref:
+                    meta_ate_hoje += valor
+        return meta_geral_mes, meta_ate_hoje
+    except: return 0, 0
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.markdown("<h1 style='color:#10b981;'>🏭 ANALYTICS HUB</h1>", unsafe_allow_html=True)
     uploaded_file = st.file_uploader("📂 Carregar Excel (.xlsm)", type=["xlsm"])
+    # Upload opcional do DATAS para o Reporte Diário
+    up_datas = st.file_uploader("📂 Carregar DATAS (.xlsx)", type=["xlsx"])
     st.markdown("---")
     if uploaded_file:
-        menu = st.radio("NAVEGAÇÃO", ["📈 PERFORMANCE", "🛑 TOP 10 PARADAS", "📅 CALENDÁRIO", "📋 ANÁLISE SEMANAL"])
+        menu = st.radio("NAVEGAÇÃO", ["📋 REPORTE DIÁRIO", "📈 PERFORMANCE", "🛑 TOP 10 PARADAS", "📅 CALENDÁRIO", "📋 ANÁLISE SEMANAL"])
 
 if uploaded_file:
     df_order, df_stops = load_data(uploaded_file)
@@ -98,9 +127,50 @@ if uploaded_file:
         return fig
 
     # =========================================================
+    # ABA: REPORTE DIÁRIO (NOVA)
+    # =========================================================
+    if menu == "📋 REPORTE DIÁRIO":
+        data_atual = df_order['Data'].max().date()
+        st.markdown(f"## 📋 Reporte Diário de Produção - {data_atual.strftime('%d/%m/%Y')}")
+
+        # Metas do arquivo DATAS
+        meta_mes, meta_dinamica = load_planner_metas(up_datas, data_atual) if up_datas else (0, 0)
+        
+        # Consolidados do Mês Atual
+        df_mes = df_order[df_order['Data'].dt.month == data_atual.month]
+        total_p_real = df_mes['Peças Estoque - Ajuste'].sum()
+        total_mov = (df_mes['Run Time'].sum() / df_mes['Horário Padrão'].sum() * 100) if df_mes['Horário Padrão'].sum() > 0 else 0
+        total_perda = ((df_mes['Machine Counter'].sum() - total_p_real) / df_mes['Machine Counter'].sum() * 100) if df_mes['Machine Counter'].sum() > 0 else 0
+
+        # Destaques Topo
+        st.markdown(f"""
+            <div class="metric-container" style="display: flex; justify-content: space-between; gap: 8px; margin-bottom: 15px;">
+                <div class="metric-card" style="flex: 1;"><div class="metric-title">Movimentação Mês</div><div class="metric-value">{total_mov:.1f}%</div></div>
+                <div class="metric-card" style="flex: 1;"><div class="metric-title">Loss Mês</div><div class="metric-value" style="color:#f43f5e">{total_perda:.1f}%</div></div>
+                <div class="metric-card" style="flex: 1;"><div class="metric-title">Estoque Realizado Mês</div><div class="metric-value">{total_p_real:,.0f}</div></div>
+            </div>
+            <div class="metric-container" style="display: flex; justify-content: space-between; gap: 8px; margin-bottom: 15px;">
+                <div class="metric-card" style="flex: 1;"><div class="metric-title">Meta Acumulada (Até Hoje)</div><div class="metric-value" style="color:#3b82f6">{meta_dinamica:,.0f}</div></div>
+                <div class="metric-card" style="flex: 1;"><div class="metric-title">Meta Geral do Mês</div><div class="metric-value" style="color:#10b981">{meta_mes:,.0f}</div></div>
+            </div>
+        """, unsafe_allow_html=True)
+
+        # Histórico com filtro
+        datas_disp = sorted(df_order['Data'].dt.date.unique().tolist(), reverse=True)
+        dias_sel = st.multiselect("Filtrar dias para visualização:", datas_disp, default=datas_disp[:3] if len(datas_disp) >= 3 else datas_disp)
+
+        for dia in dias_sel:
+            st.markdown(f"<div class='section-header'>DIA: {dia.strftime('%d/%m/%Y')}</div>", unsafe_allow_html=True)
+            df_dia = df_order[df_order['Data'].dt.date == dia]
+            res = df_dia.groupby(['Categoria', 'Máquina']).agg({'Run Time':'sum','Horário Padrão':'sum','Machine Counter':'sum','Peças Estoque - Ajuste':'sum'}).reset_index()
+            res['Mov %'] = (res['Run Time']/res['Horário Padrão'].replace(0,1)*100).round(1)
+            res['Perda %'] = ((res['Machine Counter']-res['Peças Estoque - Ajuste'])/res['Machine Counter'].replace(0,1)*100).round(1)
+            st.table(res[['Categoria','Máquina','Mov %','Perda %','Peças Estoque - Ajuste']])
+
+    # =========================================================
     # ABA 1: PERFORMANCE GERAL
     # =========================================================
-    if menu == "📈 PERFORMANCE":
+    elif menu == "📈 PERFORMANCE":
         st.sidebar.subheader("Filtros Performance")
         f_data = st.sidebar.date_input("Período", [df_order['Data'].min(), df_order['Data'].max()], key='p1')
         f_maq = st.sidebar.multiselect("Máquinas", sorted(df_order['Máquina'].unique()), default=sorted(df_order['Máquina'].unique()), key='m1')
@@ -194,7 +264,6 @@ if uploaded_file:
         df_sb = df_stops[(df_stops['Data'].dt.date >= periodo_b[0]) & (df_stops['Data'].dt.date <= periodo_b[1]) & 
                          (df_stops['Máquina'] == maq_b) & (df_stops['Turno'].isin(turno_b))]
 
-        # Título Dinâmico com Turnos
         str_turnos = ", ".join(turno_b) if turno_b else "Nenhum"
         st.markdown(f"""<div style="text-align:center; border-bottom:3px solid #10b981; padding-bottom:10px; margin-bottom:15px;">
             <h1 style="color:white; margin:0;">RELATÓRIO SEMANAL DE PERFORMANCE - MÁQUINA {maq_b}</h1>
@@ -210,7 +279,6 @@ if uploaded_file:
         with v2: st.plotly_chart(mini_gauge("Loss", l_v, "#e74c3c", 5, 180), use_container_width=True)
         with v3: st.markdown(f'<div class="metric-card" style="height:150px;"><div class="metric-title">Peças Enviadas</div><div class="metric-value" style="font-size:1.8rem;">{pecas_v:,.0f}</div></div>', unsafe_allow_html=True)
 
-        # Ranking e Mensagem
         rank_df = df_b_all.groupby('Máquina').agg({'Run Time':'sum','Horário Padrão':'sum'}).reset_index()
         rank_df['Mov %'] = (rank_df['Run Time'] / rank_df['Horário Padrão'].replace(0,1) * 100).round(1)
         rank_df = rank_df.sort_values('Mov %', ascending=False).reset_index(drop=True)
