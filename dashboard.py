@@ -47,7 +47,6 @@ st.markdown("""
     .five-why-line { border-bottom: 1px dotted #000; padding: 10px 0; font-size: 0.9rem; }
     .feedback-box { padding: 12px; border-radius: 8px; margin-bottom: 10px; text-align: center; font-weight: 700; font-size: 0.9rem; }
     
-    /* Estilo Adicional para Títulos de Seção do Reporte */
     .section-header {
         background: #1e293b; padding: 10px; border-radius: 5px;
         color: #10b981; font-weight: 800; text-transform: uppercase;
@@ -71,7 +70,7 @@ def load_data(file_obj):
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
     df_order['Data'] = pd.to_datetime(df_order['Data'], errors='coerce')
-    df_order = df_order.dropna(subset=['Data']) # Evita TypeError no sort
+    df_order = df_order.dropna(subset=['Data'])
     df_order['Máquina'] = df_order['Máquina'].fillna(0).astype(int).astype(str)
     df_order['Turno'] = df_order['Turno'].fillna(0).astype(int).astype(str)
     
@@ -80,30 +79,29 @@ def load_data(file_obj):
     df_stops['Máquina'] = df_stops['Máquina'].fillna(0).astype(int).astype(str)
     df_stops['Turno'] = df_stops['Turno'].fillna(0).astype(int).astype(str)
 
-    # Categorização BABY vs ADULTO
     def categorize(m): return "BABY" if m in ['2', '3', '4', '5', '6'] else "ADULTO"
     df_order['Categoria'] = df_order['Máquina'].apply(categorize)
     
     return df_order, df_stops
 
 @st.cache_data
-def load_metas_datas(file, data_ref):
+def load_planner_metas(file, data_ref):
     try:
         xls = pd.ExcelFile(file)
         target = next((s for s in xls.sheet_names if "PEÇAS" in s.upper()), None)
         df_raw = pd.read_excel(file, sheet_name=target, header=None)
         row_dates = df_raw.iloc[2, :].tolist()
-        row_meta = df_raw.iloc[124, :].tolist() # Linha 125 (index 124)
+        row_meta = df_raw.iloc[124, :].tolist() 
         
-        meta_mes = 0
-        meta_hoje = 0
+        meta_geral_mes = 0
+        meta_ate_hoje = 0
         for col_idx, d_val in enumerate(row_dates):
             if isinstance(d_val, (datetime, pd.Timestamp)):
                 valor = pd.to_numeric(row_meta[col_idx], errors='coerce') or 0
-                meta_mes += valor
+                meta_geral_mes += valor
                 if d_val.date() <= data_ref:
-                    meta_hoje += valor
-        return meta_mes, meta_hoje
+                    meta_ate_hoje += valor
+        return meta_geral_mes, meta_ate_hoje
     except: return 0, 0
 
 # --- SIDEBAR ---
@@ -130,27 +128,25 @@ if uploaded_file:
         return fig
 
     # =========================================================
-    # ABA: REPORTE DIÁRIO (NOVA E CORRIGIDA)
+    # ABA: REPORTE DIÁRIO (COM GAP/GANHO NAS METAS)
     # =========================================================
     if menu == "📋 REPORTE DIÁRIO":
         st.subheader("⚙️ Filtros da Página")
         col_f1, col_f2 = st.columns(2)
         with col_f1:
-            data_ref_reporte = st.date_input("Data de Referência (Cabeçalho)", df_order['Data'].max().date())
+            data_ref_reporte = st.date_input("Data de Referência (Acumulado Mês)", df_order['Data'].max().date())
         with col_f2:
             datas_disp = sorted(df_order['Data'].dt.date.unique().tolist(), reverse=True)
             dias_selecionados = st.multiselect("Filtrar dias para histórico (Tabelas):", datas_disp, default=datas_disp[:3] if len(datas_disp) >= 3 else datas_disp)
 
         st.markdown(f"## 📋 Reporte Diário de Produção - {data_ref_reporte.strftime('%d/%m/%Y')}")
 
-        # Filtro de Acumulado: Dia 1 do mês até data_ref
         df_acumulado_mes = df_order[
             (df_order['Data'].dt.month == data_ref_reporte.month) & 
             (df_order['Data'].dt.year == data_ref_reporte.year) & 
             (df_order['Data'].dt.date <= data_ref_reporte)
         ]
         
-        # Cálculos de KPI Mês (Coluna AN: Peças Estoque - Ajuste)
         estoque_acum_mes = df_acumulado_mes['Peças Estoque - Ajuste'].sum()
         mc_acum_mes = df_acumulado_mes['Machine Counter'].sum()
         rt_acum_mes = df_acumulado_mes['Run Time'].sum()
@@ -158,31 +154,33 @@ if uploaded_file:
         
         mov_acum_mes = (rt_acum_mes / hp_acum_mes * 100) if hp_acum_mes > 0 else 0
         loss_acum_mes = ((mc_acum_mes - estoque_acum_mes) / mc_acum_mes * 100) if mc_acum_mes > 0 else 0
+        
+        meta_mov = 90.0
+        meta_loss = 2.5
+        gap_mov = mov_acum_mes - meta_mov
+        gap_loss = meta_loss - loss_acum_mes # Positivo é bom (loss menor que a meta)
 
-        # Metas do Arquivo DATAS
-        meta_geral_mes, meta_dinamica_hoje = load_metas_datas(up_datas, data_ref_reporte) if up_datas else (0, 0)
+        meta_geral_mes, meta_dinamica_hoje = load_planner_metas(up_datas, data_ref_reporte) if up_datas else (0, 0)
 
-        # Cabeçalho Destaque
+        # Cabeçalho Destaque com Delta (Gap/Ganho)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Movimentação Mês (Meta 90%)", f"{mov_acum_mes:.1f}%", f"{gap_mov:.1f}% vs meta")
+        c2.metric("Loss Mês (Meta 2,5%)", f"{loss_acum_mes:.1f}%", f"{loss_acum_mes - meta_loss:.1f}% vs meta", delta_color="inverse")
+        c3.metric("Estoque Realizado Mês", f"{estoque_acum_mes:,.0f}")
+
         st.markdown(f"""
             <div class="metric-container">
-                <div class="metric-card"><div class="metric-title">Movimentação Mês</div><div class="metric-value">{mov_acum_mes:.1f}%</div></div>
-                <div class="metric-card"><div class="metric-title">Loss Mês</div><div class="metric-value" style="color:#f43f5e">{loss_acum_mes:.1f}%</div></div>
-                <div class="metric-card"><div class="metric-title">Estoque Realizado Mês</div><div class="metric-value">{estoque_acum_mes:,.0f}</div></div>
-            </div>
-            <div class="metric-container">
-                <div class="metric-card"><div class="metric-title">Meta Acumulada (Até {data_ref_reporte.strftime('%d/%m')})</div><div class="metric-value" style="color:#3b82f6">{meta_dinamica_hoje:,.0f}</div></div>
-                <div class="metric-card"><div class="metric-title">Meta Geral do Mês (Datas)</div><div class="metric-value" style="color:#10b981">{meta_geral_mes:,.0f}</div></div>
+                <div class="metric-card" style="flex: 1;"><div class="metric-title">Meta Acumulada (Até {data_ref_reporte.strftime('%d/%m')})</div><div class="metric-value" style="color:#3b82f6">{meta_dinamica_hoje:,.0f}</div></div>
+                <div class="metric-card" style="flex: 1;"><div class="metric-title">Meta Geral do Mês (Datas)</div><div class="metric-value" style="color:#10b981">{meta_geral_mes:,.0f}</div></div>
             </div>
         """, unsafe_allow_html=True)
 
-        # Listagem Diária (Baseada no Filtro 2)
         for dia in dias_selecionados:
             st.markdown(f"<div class='section-header'>DETALHAMENTO POR MÁQUINA - {dia.strftime('%d/%m/%Y')}</div>", unsafe_allow_html=True)
             df_dia = df_order[df_order['Data'].dt.date == dia]
             res = df_dia.groupby(['Categoria', 'Máquina']).agg({'Run Time':'sum','Horário Padrão':'sum','Machine Counter':'sum','Peças Estoque - Ajuste':'sum'}).reset_index()
             res['Movimentação %'] = (res['Run Time'] / res['Horário Padrão'].replace(0,1) * 100).round(1)
             res['Perda %'] = ((res['Machine Counter'] - res['Peças Estoque - Ajuste']) / res['Machine Counter'].replace(0,1) * 100).round(1)
-            
             st.table(res[['Categoria','Máquina','Movimentação %','Perda %','Peças Estoque - Ajuste']].rename(columns={'Peças Estoque - Ajuste':'Qtd Estoque'}))
 
     # =========================================================
@@ -234,7 +232,6 @@ if uploaded_file:
         st.markdown("## 🛑 Análise de Paradas")
         top_min = df_s_f.groupby('Problema')['Minutos'].sum().sort_values(ascending=True).tail(10)
         st.plotly_chart(px.bar(top_min, orientation='h', title="Minutos Totais", color_discrete_sequence=['#f43f5e']), use_container_width=True)
-        
         top_qtd = df_s_f.groupby('Problema')['QTD'].sum().sort_values(ascending=True).tail(10)
         st.plotly_chart(px.bar(top_qtd, orientation='h', title="Frequência (Quantidade)", color_discrete_sequence=['#3b82f6']), use_container_width=True)
 
@@ -254,14 +251,14 @@ if uploaded_file:
         st.markdown(f"## 📅 Operação - {mes_sel}")
         days = list(calendar.Calendar(0).itermonthdays(datetime.now().year, mes_idx))
         html = '<div class="calendar-grid">'
-        for n in ['SEG','TER','QUA','QUI','SEX','SAB','DOM']: html += f'<div style="text-align:center; color:#64748b; font-weight:900; font-size:0.7rem;">{n}</div>'
+        for n in ['SEG','TER','QUA','QUI','SEX','SAB','DOM']: html += f'<div style="text-align:center; color:#10b981; font-weight:900;">{n}</div>'
         for d in days:
             if d == 0: html += '<div></div>'
             else:
                 row = cal_data[cal_data['Data']==d]
                 m_v = (row['Run Time'].values[0] / row['Horário Padrão'].replace(0,1).values[0] * 100) if not row.empty else 0
                 cor = "#059669" if m_v > 85 else "#dc2626" if m_v > 0 else "#1e293b"
-                html += f'<div class="day-card" style="background:{cor}"><span class="day-number">{d}</span><div class="day-status">M: {m_v:.1f}%</div></div>'
+                html += f'<div class="day-card" style="background:{cor}"><span style="font-weight:900;">{d}</span><div class="day-status">M: {m_v:.1f}%</div></div>'
         st.markdown(html + '</div>', unsafe_allow_html=True)
 
     # =========================================================
