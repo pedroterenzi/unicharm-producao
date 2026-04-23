@@ -313,5 +313,3 @@ if uploaded_file:
         """, unsafe_allow_html=True)
 else:
     st.info("💡 Carregue o arquivo Excel para iniciar.")
-else:
-    st.info("💡 Carregue os arquivos para começar.")
