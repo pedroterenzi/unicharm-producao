@@ -295,29 +295,54 @@ if uploaded_file:
 
     # =========================================================
     # ABA: CALENDÁRIO
+
     # =========================================================
+
     elif menu == "📅 CALENDÁRIO":
+
         mes_sel = st.sidebar.selectbox("Mês", list(calendar.month_name)[1:], index=datetime.now().month-1)
+
         m_idx = list(calendar.month_name).index(mes_sel) + 1
+
         df_c = df_order[(df_order['Data'].dt.month == m_idx)]
+
         cal_data = df_c.groupby(df_c['Data'].dt.day).agg({'Run Time':'sum','Horário Padrão':'sum'}).reset_index()
+
         
+
         st.markdown(f"### 📅 Cronograma {mes_sel}")
+
         cols = st.columns(7)
+
         for i, d in enumerate(['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo']): cols[i].markdown(f"<div class='calendar-day-name'>{d}</div>", unsafe_allow_html=True)
+
         
-        days = list(calendar.Calendar(0).itermonthdays(data_ref_reporte.year, m_idx))
+
+        days = list(calendar.Calendar(0).itermonthdays(datetime.now().year, m_idx))
+
         html_grid = '<div class="calendar-grid">'
+
         for d in days:
+
             if d == 0: html_grid += '<div></div>'
+
             else:
+
                 row = cal_data[cal_data['Data']==d]
-                mov = (row['Run Time'].values[0]/row['Horário Padrão'].replace(0,1).values[0]*100) if not row.empty else 0
-                cor = "#059669" if mov > 85 else "#dc2626" if mov > 0 else "#f1f5f9"
-                html_grid += f'<div class="day-card" style="background:{cor}"><span class="day-number">{d}</span><div class="day-status" style="color:{"white" if mov > 0 else "#64748b"}">{mov:.1f}%</div></div>'
+
+                mov = (row['Run Time'].values[0]/row['Horário Padrão'].values[0]*100) if not row.empty and row['Horário Padrão'].values[0]>0 else 0
+
+                cor = "#059669" if mov > 85 else "#dc2626" if mov > 0 else "#1e293b"
+
+                html_grid += f'<div class="day-card" style="background:{cor}"><span class="day-number">{d}</span><div class="day-status">{mov:.1f}%</div></div>'
+
         st.markdown(html_grid + '</div>', unsafe_allow_html=True)
 
-     # ABA 4: ANÁLISE SEMANAL (MANTIDA)
+
+
+  # =========================================================
+
+    # ABA 4: ANÁLISE SEMANAL (MANTIDA)
 
     # =========================================================
 
@@ -478,4 +503,5 @@ if uploaded_file:
 else:
 
     st.info("💡 Carregue o arquivo Excel para iniciar.") 
+
 
