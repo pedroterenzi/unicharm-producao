@@ -10,10 +10,12 @@ st.set_page_config(layout="wide", page_title="Industrial Analytics Hub", page_ic
 
 # --- FUNÇÃO AUXILIAR DE FORMATAÇÃO (Milhares com ponto) ---
 def fmt(valor):
+    if pd.isna(valor) or valor is None:
+        return "0"
     try:
-        return f"{valor:,.0f}".replace(",", ".")
+        return f"{int(valor):,}".replace(",", ".")
     except:
-        return valor
+        return str(valor)
 
 # --- ESTILIZAÇÃO CSS PREMIUM (LIGHT MODE - FUNDO BRANCO) ---
 st.markdown("""
@@ -174,11 +176,12 @@ with st.sidebar:
 if uploaded_file:
     df_order, df_stops = load_data(uploaded_file)
 
+    # CORREÇÃO: Propriedades 'color' movidas para dentro do sub-dicionário 'font' para evitar o ValueError
     def mini_gauge(label, value, color, target, height=150):
         fig = go.Figure(go.Indicator(
             mode="gauge+number", value=value,
-            number={'suffix': "%", 'font': {'size': 18}, 'color': '#1e293b'},
-            title={'text': label, 'font': {'size': 12}, 'color': '#64748b'},
+            number={'suffix': "%", 'font': {'size': 18, 'color': '#1e293b'}},
+            title={'text': label, 'font': {'size': 12, 'color': '#64748b'}},
             gauge={'axis': {'range': [0, 100], 'tickcolor': '#1e293b'}, 'bar': {'color': color},
                    'threshold': {'line': {'color': "#1e293b", 'width': 2}, 'value': target}}
         ))
@@ -251,7 +254,7 @@ if uploaded_file:
             st.table(res[['Categoria','Máquina','Movimentação %','Perda %','Peças Estoque']])
 
     # =========================================================
-    # ABA: PERFORMANCE (ATUALIZADA COM MÁQUINA/TURNO NO TÍTULO)
+    # ABA: PERFORMANCE
     # =========================================================
     elif menu == "📈 PERFORMANCE":
         st.sidebar.subheader("Filtros")
@@ -260,7 +263,6 @@ if uploaded_file:
         f_turno = st.sidebar.multiselect("Turnos", sorted(df_order['Turno'].unique()), default=sorted(df_order['Turno'].unique()), key='t1')
         df_f = df_order[(df_order['Data'].dt.date >= f_data[0]) & (df_order['Data'].dt.date <= f_data[1]) & (df_order['Máquina'].isin(f_maq)) & (df_order['Turno'].isin(f_turno))]
         
-        # Strings para exibir os filtros aplicados de forma amigável no cabeçalho
         str_maquinas = ", ".join(f_maq) if f_maq else "Nenhuma"
         str_turnos_f = ", ".join(f_turno) if f_turno else "Nenhum"
         
@@ -284,13 +286,13 @@ if uploaded_file:
     # =========================================================
     elif menu == "🛑 TOP 10 PARADAS":
         st.sidebar.subheader("Filtros Paradas")
-        f_d_s = st.sidebar.date_input("Período", [df_stops['Data'].min(), df_stops['Data'].max()], key='p2')
+        f_data_s = st.sidebar.date_input("Período", [df_stops['Data'].min(), df_stops['Data'].max()], key='p2')
         f_maq_s = st.sidebar.multiselect("Máquinas", sorted(df_stops['Máquina'].unique()), default=sorted(df_stops['Máquina'].unique()), key='m2')
         f_turno_s = st.sidebar.multiselect("Turnos", sorted(df_stops['Turno'].unique()), default=sorted(df_stops['Turno'].unique()), key='ts2')
         
         df_s_f = df_stops[
-            (df_stops['Data'].dt.date >= f_d_s[0]) & 
-            (df_stops['Data'].dt.date <= f_d_s[1]) & 
+            (df_stops['Data'].dt.date >= f_data_s[0]) & 
+            (df_stops['Data'].dt.date <= f_data_s[1]) & 
             (df_stops['Máquina'].isin(f_maq_s)) & 
             (df_stops['Turno'].isin(f_turno_s))
         ]
@@ -309,9 +311,11 @@ if uploaded_file:
         
         st.markdown(f"### 📅 Cronograma {mes_sel}")
         cols = st.columns(7)
-        for i, d in enumerate(['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo']): cols[i].markdown(f"<div class='calendar-day-name'>{d}</div>", unsafe_allow_html=True)
+        for i, d_name in enumerate(['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo']): cols[i].markdown(f"<div class='calendar-day-name'>{d_name}</div>", unsafe_allow_html=True)
         
-        days = list(calendar.Calendar(0).itermonthdays(data_ref_reporte.year, m_idx))
+        # CORREÇÃO: Removido data_ref_reporte.year (não instanciada) e inserido o maior ano contido na base
+        ano_ref = df_order['Data'].max().year
+        days = list(calendar.Calendar(0).itermonthdays(ano_ref, m_idx))
         html_grid = '<div class="calendar-grid">'
         for d in days:
             if d == 0: html_grid += '<div></div>'
@@ -326,6 +330,7 @@ if uploaded_file:
     # ABA: ANÁLISE SEMANAL
     # =========================================================
     elif menu == "📋 ANÁLISE SEMANAL":
+        st.sidebar.subheader("Filtros Board")
         maq_b = st.sidebar.selectbox("Máquina", sorted(df_order['Máquina'].unique()))
         turno_b = st.sidebar.multiselect("Turnos", sorted(df_order['Turno'].unique()), default=sorted(df_order['Turno'].unique()), key='tb')
         periodo_b = st.sidebar.date_input("Período", [df_order['Data'].max() - timedelta(days=7), df_order['Data'].max()])
@@ -359,10 +364,10 @@ if uploaded_file:
             posicao = check_maq.index[0]
             total_maqs = len(rank_df)
             if posicao <= 2:
-                msg, cor = ("🏆 Liderança semanal! Excelente performance.", "#dcfce7")
+                msg, col = ("🏆 Liderança semanal! Excelente performance.", "#dcfce7")
             else:
-                msg, cor = ("🚀 Foco na melhoria para subir o ranking semanal!", "#fee2e2")
-            st.markdown(f'<div class="feedback-box" style="background:{cor}; color:black; border-left:5px solid #10b981;">{msg}</div>', unsafe_allow_html=True)
+                msg, col = ("🚀 Foco na melhoria para subir o ranking semanal!", "#fee2e2")
+            st.markdown(f'<div class="feedback-box" style="background:{col}; color:black; border-left:5px solid #10b981;">{msg}</div>', unsafe_allow_html=True)
 
         col_g, col_r = st.columns([2, 1])
         with col_g:
@@ -382,4 +387,4 @@ if uploaded_file:
             4. Por que? <div class="five-why-line"></div> 5. Por que? <div class="five-why-line"></div>
             <b>CAUSA RAIZ / PLANO DE AÇÃO:</b> <div class="five-why-line"></div><div class="five-why-line"></div></div>""", unsafe_allow_html=True)
 else:
-    st.info("💡 Por favor, carregue os arquivos Excel para iniciar.")
+    st.info("💡 Carregue o arquivo Excel para iniciar.")
