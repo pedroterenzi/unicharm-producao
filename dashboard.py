@@ -174,12 +174,11 @@ with st.sidebar:
 if uploaded_file:
     df_order, df_stops = load_data(uploaded_file)
 
-    # FIX: Configuração de fonte corrigida para alinhar com o Plotly (color agora fica dentro de font={})
     def mini_gauge(label, value, color, target, height=150):
         fig = go.Figure(go.Indicator(
             mode="gauge+number", value=value,
-            number={'suffix': "%", 'font': {'size': 18, 'color': '#1e293b'}},
-            title={'text': label, 'font': {'size': 12, 'color': '#64748b'}},
+            number={'suffix': "%", 'font': {'size': 18}, 'color': '#1e293b'},
+            title={'text': label, 'font': {'size': 12}, 'color': '#64748b'},
             gauge={'axis': {'range': [0, 100], 'tickcolor': '#1e293b'}, 'bar': {'color': color},
                    'threshold': {'line': {'color': "#1e293b", 'width': 2}, 'value': target}}
         ))
@@ -252,7 +251,7 @@ if uploaded_file:
             st.table(res[['Categoria','Máquina','Movimentação %','Perda %','Peças Estoque']])
 
     # =========================================================
-    # ABA: PERFORMANCE
+    # ABA: PERFORMANCE (ATUALIZADA COM MÁQUINA/TURNO NO TÍTULO)
     # =========================================================
     elif menu == "📈 PERFORMANCE":
         st.sidebar.subheader("Filtros")
@@ -260,6 +259,12 @@ if uploaded_file:
         f_maq = st.sidebar.multiselect("Máquinas", sorted(df_order['Máquina'].unique()), default=sorted(df_order['Máquina'].unique()), key='m1')
         f_turno = st.sidebar.multiselect("Turnos", sorted(df_order['Turno'].unique()), default=sorted(df_order['Turno'].unique()), key='t1')
         df_f = df_order[(df_order['Data'].dt.date >= f_data[0]) & (df_order['Data'].dt.date <= f_data[1]) & (df_order['Máquina'].isin(f_maq)) & (df_order['Turno'].isin(f_turno))]
+        
+        # Strings para exibir os filtros aplicados de forma amigável no cabeçalho
+        str_maquinas = ", ".join(f_maq) if f_maq else "Nenhuma"
+        str_turnos_f = ", ".join(f_turno) if f_turno else "Nenhum"
+        
+        st.markdown(f"## 📈 Performance Industrial — Máquina(s): {str_maquinas} | Turno(s): {str_turnos_f}")
         
         st.markdown(f"""
             <div class="metric-container">
@@ -304,7 +309,7 @@ if uploaded_file:
         
         st.markdown(f"### 📅 Cronograma {mes_sel}")
         cols = st.columns(7)
-        for i, d_name in enumerate(['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo']): cols[i].markdown(f"<div class='calendar-day-name'>{d_name}</div>", unsafe_allow_html=True)
+        for i, d in enumerate(['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo']): cols[i].markdown(f"<div class='calendar-day-name'>{d}</div>", unsafe_allow_html=True)
         
         days = list(calendar.Calendar(0).itermonthdays(data_ref_reporte.year, m_idx))
         html_grid = '<div class="calendar-grid">'
@@ -321,7 +326,6 @@ if uploaded_file:
     # ABA: ANÁLISE SEMANAL
     # =========================================================
     elif menu == "📋 ANÁLISE SEMANAL":
-        st.sidebar.subheader("Filtros Board")
         maq_b = st.sidebar.selectbox("Máquina", sorted(df_order['Máquina'].unique()))
         turno_b = st.sidebar.multiselect("Turnos", sorted(df_order['Turno'].unique()), default=sorted(df_order['Turno'].unique()), key='tb')
         periodo_b = st.sidebar.date_input("Período", [df_order['Data'].max() - timedelta(days=7), df_order['Data'].max()])
