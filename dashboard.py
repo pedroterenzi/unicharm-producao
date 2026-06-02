@@ -174,11 +174,12 @@ with st.sidebar:
 if uploaded_file:
     df_order, df_stops = load_data(uploaded_file)
 
+    # FIX: Configuração de fonte corrigida para alinhar com o Plotly (color agora fica dentro de font={})
     def mini_gauge(label, value, color, target, height=150):
         fig = go.Figure(go.Indicator(
             mode="gauge+number", value=value,
-            number={'suffix': "%", 'font': {'size': 18}, 'color': '#1e293b'},
-            title={'text': label, 'font': {'size': 12}, 'color': '#64748b'},
+            number={'suffix': "%", 'font': {'size': 18, 'color': '#1e293b'}},
+            title={'text': label, 'font': {'size': 12, 'color': '#64748b'}},
             gauge={'axis': {'range': [0, 100], 'tickcolor': '#1e293b'}, 'bar': {'color': color},
                    'threshold': {'line': {'color': "#1e293b", 'width': 2}, 'value': target}}
         ))
@@ -274,7 +275,7 @@ if uploaded_file:
         with col2: st.plotly_chart(mini_gauge("Loss (%)", ((df_f['Machine Counter'].sum()-df_f['Peças Estoque - Ajuste'].sum())/df_f['Machine Counter'].sum()*100 if df_f['Machine Counter'].sum()>0 else 0), "#e74c3c", 2.5, 280), use_container_width=True)
 
     # =========================================================
-    # ABA: TOP 10 PARADAS (ATUALIZADA COM FILTROS SOLICITADOS)
+    # ABA: TOP 10 PARADAS
     # =========================================================
     elif menu == "🛑 TOP 10 PARADAS":
         st.sidebar.subheader("Filtros Paradas")
@@ -282,7 +283,6 @@ if uploaded_file:
         f_maq_s = st.sidebar.multiselect("Máquinas", sorted(df_stops['Máquina'].unique()), default=sorted(df_stops['Máquina'].unique()), key='m2')
         f_turno_s = st.sidebar.multiselect("Turnos", sorted(df_stops['Turno'].unique()), default=sorted(df_stops['Turno'].unique()), key='ts2')
         
-        # Filtro de dados aplicando Data, Máquina e Turno nas paradas
         df_s_f = df_stops[
             (df_stops['Data'].dt.date >= f_d_s[0]) & 
             (df_stops['Data'].dt.date <= f_d_s[1]) & 
@@ -295,54 +295,30 @@ if uploaded_file:
 
     # =========================================================
     # ABA: CALENDÁRIO
-
     # =========================================================
-
     elif menu == "📅 CALENDÁRIO":
-
         mes_sel = st.sidebar.selectbox("Mês", list(calendar.month_name)[1:], index=datetime.now().month-1)
-
         m_idx = list(calendar.month_name).index(mes_sel) + 1
-
         df_c = df_order[(df_order['Data'].dt.month == m_idx)]
-
         cal_data = df_c.groupby(df_c['Data'].dt.day).agg({'Run Time':'sum','Horário Padrão':'sum'}).reset_index()
-
         
-
         st.markdown(f"### 📅 Cronograma {mes_sel}")
-
         cols = st.columns(7)
-
-        for i, d in enumerate(['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo']): cols[i].markdown(f"<div class='calendar-day-name'>{d}</div>", unsafe_allow_html=True)
-
+        for i, d_name in enumerate(['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo']): cols[i].markdown(f"<div class='calendar-day-name'>{d_name}</div>", unsafe_allow_html=True)
         
-
-        days = list(calendar.Calendar(0).itermonthdays(datetime.now().year, m_idx))
-
+        days = list(calendar.Calendar(0).itermonthdays(data_ref_reporte.year, m_idx))
         html_grid = '<div class="calendar-grid">'
-
         for d in days:
-
             if d == 0: html_grid += '<div></div>'
-
             else:
-
                 row = cal_data[cal_data['Data']==d]
-
-                mov = (row['Run Time'].values[0]/row['Horário Padrão'].values[0]*100) if not row.empty and row['Horário Padrão'].values[0]>0 else 0
-
-                cor = "#059669" if mov > 85 else "#dc2626" if mov > 0 else "#1e293b"
-
-                html_grid += f'<div class="day-card" style="background:{cor}"><span class="day-number">{d}</span><div class="day-status">{mov:.1f}%</div></div>'
-
+                mov = (row['Run Time'].values[0]/row['Horário Padrão'].replace(0,1).values[0]*100) if not row.empty else 0
+                cor = "#059669" if mov > 85 else "#dc2626" if mov > 0 else "#f1f5f9"
+                html_grid += f'<div class="day-card" style="background:{cor}"><span class="day-number">{d}</span><div class="day-status" style="color:{"white" if mov > 0 else "#64748b"}">{mov:.1f}%</div></div>'
         st.markdown(html_grid + '</div>', unsafe_allow_html=True)
 
-
-
-  # =========================================================
-
-# ABA: ANÁLISE SEMANAL
+    # =========================================================
+    # ABA: ANÁLISE SEMANAL
     # =========================================================
     elif menu == "📋 ANÁLISE SEMANAL":
         st.sidebar.subheader("Filtros Board")
@@ -403,7 +379,3 @@ if uploaded_file:
             <b>CAUSA RAIZ / PLANO DE AÇÃO:</b> <div class="five-why-line"></div><div class="five-why-line"></div></div>""", unsafe_allow_html=True)
 else:
     st.info("💡 Por favor, carregue os arquivos Excel para iniciar.")
-
-
-
-
