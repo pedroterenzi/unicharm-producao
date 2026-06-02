@@ -342,166 +342,68 @@ if uploaded_file:
 
   # =========================================================
 
-    # ABA 4: ANÁLISE SEMANAL (MANTIDA)
-
+# ABA: ANÁLISE SEMANAL
     # =========================================================
-
     elif menu == "📋 ANÁLISE SEMANAL":
-
         st.sidebar.subheader("Filtros Board")
-
         maq_b = st.sidebar.selectbox("Máquina", sorted(df_order['Máquina'].unique()))
-
         turno_b = st.sidebar.multiselect("Turnos", sorted(df_order['Turno'].unique()), default=sorted(df_order['Turno'].unique()), key='tb')
-
         periodo_b = st.sidebar.date_input("Período", [df_order['Data'].max() - timedelta(days=7), df_order['Data'].max()])
-
         
-
         df_b_all = df_order[(df_order['Data'].dt.date >= periodo_b[0]) & (df_order['Data'].dt.date <= periodo_b[1]) & (df_order['Turno'].isin(turno_b))]
-
         df_b = df_b_all[df_b_all['Máquina'] == maq_b]
-
-        df_sb = df_stops[(df_stops['Data'].dt.date >= periodo_b[0]) & (df_stops['Data'].dt.date <= periodo_b[1]) & 
-
-                         (df_stops['Máquina'] == maq_b) & (df_stops['Turno'].isin(turno_b))]
-
-
+        df_sb = df_stops[(df_stops['Data'].dt.date >= periodo_b[0]) & (df_stops['Data'].dt.date <= periodo_b[1]) & (df_stops['Máquina'] == maq_b) & (df_stops['Turno'].isin(turno_b))]
 
         str_turnos = ", ".join(turno_b) if turno_b else "Nenhum"
-
         st.markdown(f"""<div style="text-align:center; border-bottom:3px solid #10b981; padding-bottom:10px; margin-bottom:15px;">
-
-            <h1 style="color:white; margin:0;">RELATÓRIO SEMANAL DE PERFORMANCE - MÁQUINA {maq_b}</h1>
-
+            <h1 style="color:#0f172a; margin:0;">RELATÓRIO SEMANAL DE PERFORMANCE - MÁQUINA {maq_b}</h1>
             <h3 style="color:#10b981; margin:0;">TURNO(S): {str_turnos}</h3>
-
-            <p style="color:#94a3b8; font-size:1rem;">Período: {periodo_b[0].strftime('%d/%m')} a {periodo_b[1].strftime('%d/%m/%Y')}</p></div>""", unsafe_allow_html=True)
-
-
+            <p style="color:#64748b; font-size:1rem;">Período: {periodo_b[0].strftime('%d/%m')} a {periodo_b[1].strftime('%d/%m/%Y')}</p></div>""", unsafe_allow_html=True)
 
         m_v = (df_b["Run Time"].sum()/df_b["Horário Padrão"].replace(0,1).sum()*100)
-
         l_v = ((df_b["Machine Counter"].sum()-df_b["Peças Estoque - Ajuste"].sum())/df_b["Machine Counter"].replace(0,1).sum()*100)
-
         pecas_v = df_b["Peças Estoque - Ajuste"].sum()
 
-
-
         v1, v2, v3 = st.columns([1, 1, 1])
-
         with v1: st.plotly_chart(mini_gauge("Movimentação", m_v, "#10b981", 85, 180), use_container_width=True)
-
         with v2: st.plotly_chart(mini_gauge("Loss", l_v, "#e74c3c", 5, 180), use_container_width=True)
-
-        with v3: st.markdown(f'<div class="metric-card" style="height:150px;"><div class="metric-title">Peças Enviadas</div><div class="metric-value" style="font-size:1.8rem;">{pecas_v:,.0f}</div></div>', unsafe_allow_html=True)
-
-
+        with v3: st.markdown(f'<div class="metric-card" style="height:150px;"><div class="metric-title">Peças Enviadas</div><div class="metric-value" style="font-size:1.8rem;">{fmt(pecas_v)}</div></div>', unsafe_allow_html=True)
 
         rank_df = df_b_all.groupby('Máquina').agg({'Run Time':'sum','Horário Padrão':'sum'}).reset_index()
-
         rank_df['Mov %'] = (rank_df['Run Time'] / rank_df['Horário Padrão'].replace(0,1) * 100).round(1)
-
         rank_df = rank_df.sort_values('Mov %', ascending=False).reset_index(drop=True)
-
         rank_df.index += 1
-
         
-
         check_maq = rank_df[rank_df['Máquina'] == maq_b]
-
         if not check_maq.empty:
-
             posicao = check_maq.index[0]
-
             total_maqs = len(rank_df)
-
             if posicao <= 2:
-
-                msg, cor_msg = f"🌟 EXCELENTE! Máquina {maq_b} no TOP 2 ({posicao}º).", "#064e3b"
-
-            elif posicao > (total_maqs - 2):
-
-                msg, cor_msg = f"💪 VAMOS LÁ! Máquina {maq_b} na posição {posicao}º. Foco total!", "#7f1d1d"
-
+                msg, cor = ("🏆 Liderança semanal! Excelente performance.", "#dcfce7")
             else:
+                msg, cor = ("🚀 Foco na melhoria para subir o ranking semanal!", "#fee2e2")
+            st.markdown(f'<div class="feedback-box" style="background:{cor}; color:black; border-left:5px solid #10b981;">{msg}</div>', unsafe_allow_html=True)
 
-                msg, cor_msg = f"📈 BOM TRABALHO! Máquina {maq_b} na posição {posicao}º.", "#1e293b"
+        col_g, col_r = st.columns([2, 1])
+        with col_g:
+            st.markdown("🛑 **Impacto das Paradas (Piores 5)**")
+            stop_data = df_sb.groupby('Problema')['Minutos'].sum().sort_values(ascending=True).tail(5)
+            st.plotly_chart(px.bar(stop_data, orientation='h', text_auto=True, color_discrete_sequence=['#10b981']).update_layout(height=300, paper_bgcolor='white', plot_bgcolor='white', font={'color':'black'}), use_container_width=True)
+            pior_p = stop_data.index[-1] if not stop_data.empty else "Nenhuma Parada"
 
-            st.markdown(f'<div class="feedback-box" style="background:{cor_msg}; color:white;">{msg}</div>', unsafe_allow_html=True)
+        with col_r:
+            st.markdown("🏆 **Ranking Movimentação**")
+            for i, r in rank_df.iterrows():
+                style = "class='highlight-rank'" if r['Máquina'] == maq_b else ""
+                st.markdown(f"<div {style}>{i}º - MÁQ {r['Máquina']}: {r['Mov %']}%</div>", unsafe_allow_html=True)
 
-
-
-        col_rank, col_stops = st.columns([1, 2])
-
-        with col_rank:
-
-            st.markdown("🏆 *Ranking Mov. (%)*")
-
-            st.dataframe(rank_df[['Máquina', 'Mov %']].style.apply(lambda s: ['background-color: #10b981' if s.Máquina == maq_b else '' for _ in s], axis=1), use_container_width=True)
-
-
-
-        with col_stops:
-
-            st.markdown("🛑 *Impacto das Paradas (%)*")
-
-            stop_imp = df_sb.groupby('Problema')['Minutos'].sum().sort_values(ascending=True).tail(5)
-
-            if not stop_imp.empty:
-
-                pior_parada = stop_imp.index[-1]
-
-                total_min_p = df_sb['Minutos'].sum()
-
-                df_p_plot = stop_imp.reset_index()
-
-                df_p_plot['%'] = (df_p_plot['Minutos'] / total_min_p * 100).round(1)
-
-                df_p_plot['Label'] = df_p_plot.apply(lambda r: f"{r['Minutos']} min ({r['%']}%)", axis=1)
-
-                fig_b = px.bar(df_p_plot, x='Minutos', y='Problema', orientation='h', text='Label', color_discrete_sequence=['#10b981'])
-
-                fig_b.update_layout(height=250, margin=dict(l=0,r=0,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', font={'color':'white'})
-
-                st.plotly_chart(fig_b, use_container_width=True)
-
-            else: pior_parada = "Nenhuma parada registrada"
-
-
-
-        st.markdown(f"""
-
-            <div class="five-why-box">
-
-                <div class="five-why-title">ANÁLISE DE CAUSA RAIZ - 5 PORQUÊS: {pior_parada}</div>
-
-                <div class="five-why-line"><b>1º Por que?</b> _______________________</div>
-
-                <div class="five-why-line"><b>2º Por que?</b> _______________________</div>
-
-                <div class="five-why-line"><b>3º Por que?</b> _______________________</div>
-
-                <div class="five-why-line"><b>4º Por que?</b> _______________________</div>
-
-                <div class="five-why-line"><b>5º Por que?</b> _______________________</div>
-
-                <br>
-
-                <div style="display:flex; gap:10px;">
-
-                    <div style="flex:1; border:1px solid #000; padding:10px; min-height:80px;"><b>CAUSA RAIZ:</b></div>
-
-                    <div style="flex:2; border:1px solid #000; padding:10px; min-height:80px;"><b>AÇÃO CORRETIVA:</b></div>
-
-                </div>
-
-            </div>
-
-        """, unsafe_allow_html=True)
-
+        st.markdown(f"""<div class="five-why-box"><h3 style="color:#059669; margin:0;">ANÁLISE 5 PORQUÊS: {pior_p}</h3>
+            1. Por que? <div class="five-why-line"></div> 2. Por que? <div class="five-why-line"></div> 3. Por que? <div class="five-why-line"></div> 
+            4. Por que? <div class="five-why-line"></div> 5. Por que? <div class="five-why-line"></div>
+            <b>CAUSA RAIZ / PLANO DE AÇÃO:</b> <div class="five-why-line"></div><div class="five-why-line"></div></div>""", unsafe_allow_html=True)
 else:
+    st.info("💡 Por favor, carregue os arquivos Excel para iniciar.")
 
-    st.info("💡 Carregue o arquivo Excel para iniciar.") 
+
 
 
