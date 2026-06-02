@@ -176,7 +176,6 @@ with st.sidebar:
 if uploaded_file:
     df_order, df_stops = load_data(uploaded_file)
 
-    # CORREÇÃO: Propriedades 'color' movidas para dentro do sub-dicionário 'font' para evitar o ValueError
     def mini_gauge(label, value, color, target, height=150):
         fig = go.Figure(go.Indicator(
             mode="gauge+number", value=value,
@@ -282,7 +281,7 @@ if uploaded_file:
         with col2: st.plotly_chart(mini_gauge("Loss (%)", ((df_f['Machine Counter'].sum()-df_f['Peças Estoque - Ajuste'].sum())/df_f['Machine Counter'].sum()*100 if df_f['Machine Counter'].sum()>0 else 0), "#e74c3c", 2.5, 280), use_container_width=True)
 
     # =========================================================
-    # ABA: TOP 10 PARADAS
+    # ABA: TOP 10 PARADAS (ATUALIZADA COM MÁQUINA/TURNO NO TÍTULO)
     # =========================================================
     elif menu == "🛑 TOP 10 PARADAS":
         st.sidebar.subheader("Filtros Paradas")
@@ -296,6 +295,12 @@ if uploaded_file:
             (df_stops['Máquina'].isin(f_maq_s)) & 
             (df_stops['Turno'].isin(f_turno_s))
         ]
+        
+        # Ajuste: Exibição das Máquinas e Turnos de forma amigável e limpa no cabeçalho
+        str_maquinas_s = ", ".join(f_maq_s) if f_maq_s else "Nenhuma"
+        str_turnos_s = ", ".join(f_turno_s) if f_turno_s else "Nenhum"
+        
+        st.markdown(f"## 🛑 Análise de Paradas — Máquina(s): {str_maquinas_s} | Turno(s): {str_turnos_s}")
         
         st.plotly_chart(px.bar(df_s_f.groupby('Problema')['Minutos'].sum().sort_values().tail(10), orientation='h', title="Minutos Totais", color_discrete_sequence=['#f43f5e']).update_layout(paper_bgcolor='white', plot_bgcolor='white', font={'color':'black'}), use_container_width=True)
         st.plotly_chart(px.bar(df_s_f.groupby('Problema')['QTD'].sum().sort_values().tail(10), orientation='h', title="Frequência (Qtd)", color_discrete_sequence=['#3b82f6']).update_layout(paper_bgcolor='white', plot_bgcolor='white', font={'color':'black'}), use_container_width=True)
@@ -313,7 +318,6 @@ if uploaded_file:
         cols = st.columns(7)
         for i, d_name in enumerate(['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo']): cols[i].markdown(f"<div class='calendar-day-name'>{d_name}</div>", unsafe_allow_html=True)
         
-        # CORREÇÃO: Removido data_ref_reporte.year (não instanciada) e inserido o maior ano contido na base
         ano_ref = df_order['Data'].max().year
         days = list(calendar.Calendar(0).itermonthdays(ano_ref, m_idx))
         html_grid = '<div class="calendar-grid">'
@@ -364,7 +368,7 @@ if uploaded_file:
             posicao = check_maq.index[0]
             total_maqs = len(rank_df)
             if posicao <= 2:
-                msg, col = ("🏆 Excelente performance.", "#dcfce7")
+                msg, col = ("🏆 Liderança semanal! Excelente performance.", "#dcfce7")
             else:
                 msg, col = ("🚀 Foco na melhoria para subir o ranking semanal!", "#fee2e2")
             st.markdown(f'<div class="feedback-box" style="background:{col}; color:black; border-left:5px solid #10b981;">{msg}</div>', unsafe_allow_html=True)
@@ -387,4 +391,4 @@ if uploaded_file:
             4. Por que? <div class="five-why-line"></div> 5. Por que? <div class="five-why-line"></div>
             <b>CAUSA RAIZ / PLANO DE AÇÃO:</b> <div class="five-why-line"></div><div class="five-why-line"></div></div>""", unsafe_allow_html=True)
 else:
-    st.info("💡 Carregue o arquivo Excel para iniciar.")
+    st.info("💡 Por favor, carregue os arquivos Excel para iniciar.")
