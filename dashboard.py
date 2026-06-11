@@ -4,15 +4,84 @@ import plotly.graph_objects as go
 import plotly.express as px
 import calendar
 from datetime import datetime, timedelta, date
-import sqlite3
+from sqlalchemy import create_engine, text
 import io
 
 # 1. CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(layout="wide", page_title="Industrial Analytics Hub", page_icon="⚙️")
 
-# --- CAMINHO DA REDE CORPORATIVA UNICHARM (Blindagem de Dados) ---
-# Definido o caminho exato enviado para persistência permanente no Disco X
-CAMINHO_BANCO_REDE = r"X:\10_Jaguariuna\1.Production\2.(Historico de produtividade)\1.(Produtividade)\Relatório de produção\reportes_turno.db"
+# =========================================================
+# BANCO DE DADOS NA NUVEM (POSTGRESQL - NEON.TECH)
+# =========================================================
+# 🟢 Sua Connection String oficial e exclusiva do Neon inserida com sucesso:
+CONNECTION_STRING = "postgresql://neondb_owner:npg_obg1nxhT6GdK@ep-bitter-dream-aierzna8.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require"
+
+@st.cache_resource
+def obter_engine():
+    # Cria uma conexão estável e otimizada com o banco de dados em nuvem
+    return create_engine(CONNECTION_STRING, pool_pre_ping=True)
+
+def init_db():
+    engine = obter_engine()
+    with engine.begin() as conn:
+        # Tabela 1: Reportes Diários de Turno (Sintaxe PostgreSQL)
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS reportes (
+                id SERIAL PRIMARY KEY,
+                data_registro TEXT,
+                turno TEXT,
+                coordenador TEXT,
+                ocorrencias TEXT,
+                maq_analisada TEXT,
+                problema TEXT,
+                pq1 TEXT, pq2 TEXT, pq3 TEXT, pq4 TEXT, pq5 TEXT,
+                oque TEXT,
+                quem TEXT,
+                quando TEXT,
+                status TEXT
+            )
+        """))
+        # Tabela 2: Análises Semanais dos Operadores
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS analises_semanais (
+                id SERIAL PRIMARY KEY,
+                data_registro TEXT,
+                turno TEXT,
+                maquina TEXT,
+                pior_parada TEXT,
+                pq1 TEXT, pq2 TEXT, pq3 TEXT, pq4 TEXT, pq5 TEXT,
+                causa_raiz TEXT,
+                plano_acao TEXT,
+                prazo TEXT,
+                responsavel TEXT,
+                status TEXT
+            )
+        """))
+        # Tabela 3: Tabela Nippo Coordenadores
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS nippo_coordenadores (
+                id SERIAL PRIMARY KEY,
+                data TEXT,
+                turno TEXT,
+                coordenador TEXT,
+                tecnico TEXT,
+                maquina TEXT,
+                itens_compartilhar TEXT,
+                produtividade REAL,
+                loss REAL,
+                sku TEXT,
+                palete_inicial TEXT,
+                palete_final TEXT,
+                total_ordem INTEGER,
+                data_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+
+# Executa a blindagem inicial e cria as tabelas remotas na nuvem
+try:
+    init_db()
+except Exception as e:
+    st.error(f"⚠️ Erro de Autenticação na Nuvem: {e}. Verifique as configurações do projeto Neon.")
 
 # --- INICIALIZAÇÃO DE ESTADOS DO STREAMLIT ---
 if 'mostrar_edicao' not in st.session_state:
@@ -32,71 +101,6 @@ if 'mostrar_edicao_nippo' not in st.session_state:
     st.session_state['mostrar_edicao_nippo'] = False
 if 'chave_nippo_edicao' not in st.session_state:
     st.session_state['chave_nippo_edicao'] = ""
-
-# =========================================================
-# BANCO DE DADOS NA REDE (SQLite)
-# =========================================================
-def init_db():
-    # Conecta diretamente ao arquivo alocado no servidor de arquivos da empresa
-    conn = sqlite3.connect(CAMINHO_BANCO_REDE)
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS reportes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            data_registro TEXT,
-            turno TEXT,
-            coordenador TEXT,
-            ocorrencias TEXT,
-            maq_analisada TEXT,
-            problema TEXT,
-            pq1 TEXT, pq2 TEXT, pq3 TEXT, pq4 TEXT, pq5 TEXT,
-            oque TEXT,
-            quem TEXT,
-            quando TEXT,
-            status TEXT
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS analises_semanais (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            data_registro TEXT,
-            turno TEXT,
-            maquina TEXT,
-            pior_parada TEXT,
-            pq1 TEXT, pq2 TEXT, pq3 TEXT, pq4 TEXT, pq5 TEXT,
-            causa_raiz TEXT,
-            plano_acao TEXT,
-            prazo TEXT,
-            responsavel TEXT,
-            status TEXT
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS nippo_coordenadores (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            data TEXT,
-            turno TEXT,
-            coordenador TEXT,
-            tecnico TEXT,
-            maquina TEXT,
-            itens_compartilhar TEXT,
-            produtividade REAL,
-            loss REAL,
-            sku TEXT,
-            palete_inicial TEXT,
-            palete_final TEXT,
-            total_ordem INTEGER,
-            data_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-# Executa a inicialização das tabelas direto na rede
-try:
-    init_db()
-except Exception as e:
-    st.error(f"⚠️ Erro de Conexão com o Disco X da Rede: {e}. Verifique se o mapeamento de rede está ativo no Windows.")
 
 def fmt(valor):
     if pd.isna(valor) or valor is None:
@@ -222,7 +226,7 @@ def load_planner_metas_advanced(file, data_ref):
 # --- SIDEBAR ---
 with st.sidebar:
     st.markdown("<h1 style='font-size:1.4rem; color:#10b981; font-weight:900; margin-bottom:15px; text-align:center;'>🏭 ANALYTICS HUB</h1>", unsafe_allow_html=True)
-    st.caption(f"💾 Banco de Dados Conectado no Disco X (Rede Unicharm)")
+    st.caption(f"☁️ Banco de Dados em Nuvem Ativo (Neon SQL)")
     
     uploaded_file = st.file_uploader("📂 Carregar Excel Produção (.xlsm)", type=["xlsm"])
     up_datas = st.file_uploader("📂 Carregar Excel DATAS (.xlsx)", type=["xlsx"])
@@ -246,11 +250,10 @@ with st.sidebar:
     st.markdown("### 🛡️ Zona de Segurança")
     if st.button("📥 BAIXAR BACKUP EM EXCEL"):
         try:
-            conn = sqlite3.connect(CAMINHO_BANCO_REDE)
-            df_b1 = pd.read_sql_query("SELECT * FROM reportes", conn)
-            df_b2 = pd.read_sql_query("SELECT * FROM analises_semanais", conn)
-            df_b3 = pd.read_sql_query("SELECT * FROM nippo_coordenadores", conn)
-            conn.close()
+            engine = obter_engine()
+            df_b1 = pd.read_sql_query("SELECT * FROM reportes", engine)
+            df_b2 = pd.read_sql_query("SELECT * FROM analises_semanais", engine)
+            df_b3 = pd.read_sql_query("SELECT * FROM nippo_coordenadores", engine)
 
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -261,7 +264,7 @@ with st.sidebar:
             st.download_button(
                 label="🟢 CLIQUE PARA BAIXAR .XLSX",
                 data=output.getvalue(),
-                file_name=f"backup_industrial_hub_{date.today().strftime('%d_%m_%Y')}.xlsx",
+                file_name=f"backup_cloud_hub_{date.today().strftime('%d_%m_%Y')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
@@ -517,23 +520,22 @@ if uploaded_file:
                 if not coord_rep or not prob_an:
                     st.error("Por favor, preencha os campos essenciais.")
                 else:
-                    conn = sqlite3.connect(CAMINHO_BANCO_REDE)
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        INSERT INTO reportes (data_registro, turno, coordenador, ocorrencias, maq_analisada, problema,
-                        pq1, pq2, pq3, pq4, pq5, oque, quem, quando, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (str(data_rep), turno_rep, coord_rep, txt_ocorrencias, maq_an, prob_an, p1, p2, p3, p4, p5, action_oque, action_quem, action_quando, status_inicial))
-                    conn.commit(); conn.close()
-                    st.success("🎉 Reporte alocado com sucesso!")
+                    engine = obter_engine()
+                    with engine.begin() as conn:
+                        conn.execute(text("""
+                            INSERT INTO reportes (data_registro, turno, coordenador, ocorrencias, maq_analisada, problema,
+                            pq1, pq2, pq3, pq4, pq5, oque, quem, quando, status) 
+                            VALUES (:data, :turno, :coord, :ocorrencias, :maq, :prob, :p1, :p2, :p3, :p4, :p5, :oque, :quem, :quando, :status)
+                        """), {"data": str(data_rep), "turno": turno_rep, "coord": coord_rep, "ocorrencias": txt_ocorrencias, "maq": maq_an, "prob": prob_an, "p1": p1, "p2": p2, "p3": p3, "p4": p4, "p5": p5, "oque": action_oque, "quem": action_quem, "quando": action_quando, "status": status_inicial})
+                    st.success("🎉 Reporte alocado com sucesso no Neon SQL!")
 
     # =========================================================
     # ABA: ACOMPANHAMENTO DIÁRIO
     # =========================================================
     elif menu == "📊 ACOMPANHAMENTO":
         st.markdown("## 📊 Painel de Acompanhamento de Ações")
-        conn = sqlite3.connect(CAMINHO_BANCO_REDE)
-        df_db = pd.read_sql_query("SELECT * FROM reportes ORDER BY data_registro DESC", conn)
-        conn.close()
+        engine = obter_engine()
+        df_db = pd.read_sql_query("SELECT * FROM reportes ORDER BY data_registro DESC", engine)
         
         if df_db.empty:
             st.info("Nenhum registro encontrado no banco de dados local.")
@@ -590,22 +592,18 @@ if uploaded_file:
                     col_actions1, col_actions2 = st.columns(2)
                     with col_actions1:
                         if st.button("💾 SALVAR ALTERAÇÕES", use_container_width=True):
-                            conn = sqlite3.connect(CAMINHO_BANCO_REDE)
-                            cursor = conn.cursor()
-                            cursor.execute("""
-                                UPDATE reportes SET coordenador=?, status=?, maq_analisada=?, ocorrencias=?, problema=?, 
-                                pq1=?, pq2=?, pq3=?, pq4=?, pq5=?, oque=?, quem=?, quando=? WHERE id=?
-                            """, (edit_coord, edit_status, edit_maq, edit_ocorrencias, edit_problema, epq1, epq2, epq3, epq4, epq5, ea_oque, ea_quem, ea_quando, int(id_selecionado)))
-                            conn.commit(); conn.close()
+                            with engine.begin() as conn:
+                                conn.execute(text("""
+                                    UPDATE reportes SET coordenador=:coord, status=:status, maq_analisada=:maq, ocorrencias=:ocorrencias, problema=:prob, 
+                                    pq1=:p1, pq2=:p2, pq3=:p3, pq4=:p4, pq5=:p5, oque=:oque, quem=:quem, quando=:quando WHERE id=:id
+                                """), {"coord": edit_coord, "status": edit_status, "maq": edit_maq, "ocorrencias": edit_ocorrencias, "prob": edit_problema, "p1": epq1, "p2": epq2, "p3": epq3, "p4": epq4, "p5": epq5, "oque": ea_oque, "quem": ea_quem, "quando": ea_quando, "id": int(id_selecionado)})
                             st.session_state['mostrar_edicao'] = False
                             st.success("🎉 Atualizado!")
                             st.rerun()
                     with col_actions2:
                         if st.button("❌ EXCLUIR REPORTE DEFINITIVAMENTE", type="primary", use_container_width=True):
-                            conn = sqlite3.connect(CAMINHO_BANCO_REDE)
-                            cursor = conn.cursor()
-                            cursor.execute("DELETE FROM reportes WHERE id = ?", (int(id_selecionado),))
-                            conn.commit(); conn.close()
+                            with engine.begin() as conn:
+                                conn.execute(text("DELETE FROM reportes WHERE id = :id"), {"id": int(id_selecionado)})
                             st.session_state['mostrar_edicao'] = False
                             st.success("Excluído!")
                             st.rerun()
@@ -639,23 +637,21 @@ if uploaded_file:
                 if not pior_parada_sem or not spq5:
                     st.error("Campos essenciais como Pior Parada e Causa Raiz devem ser informados.")
                 else:
-                    conn = sqlite3.connect(CAMINHO_BANCO_REDE)
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        INSERT INTO analises_semanais (data_registro, turno, maquina, pior_parada, pq1, pq2, pq3, pq4, pq5, causa_raiz, plano_acao, prazo, responsavel, status)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (str(semana_ref), turno_sem, maq_sem, pior_parada_sem, spq1, spq2, spq3, spq4, spq5, spq5, sa_oque, sa_quando, sa_quem, sa_status))
-                    conn.commit(); conn.close()
-                    st.success("🎉 Análise semanal gravada de forma definitiva!")
+                    engine = obter_engine()
+                    with engine.begin() as conn:
+                        conn.execute(text("""
+                            INSERT INTO analises_semanais (data_registro, turno, maquina, pior_parada, pq1, pq2, pq3, pq4, pq5, causa_raiz, plano_acao, prazo, responsavel, status)
+                            VALUES (:data, :turno, :maq, :pior, :p1, :p2, :p3, :p4, :p5, :causa, :plano, :prazo, :resp, :status)
+                        """), {"data": str(semana_ref), "turno": turno_sem, "maq": maq_sem, "pior": pior_parada_sem, "p1": spq1, "p2": spq2, "p3": spq3, "p4": spq4, "p5": spq5, "causa": spq5, "plano": sa_oque, "prazo": sa_quando, "resp": sa_quem, "status": sa_status})
+                    st.success("🎉 Análise semanal gravada na nuvem!")
 
     # =========================================================
     # ABA: ACOMPANHAMENTO ANÁLISES SEMANAIS
     # =========================================================
     elif menu == "📋 ACOMP. ANÁLISES SEMANAIS":
         st.markdown("## 📋 Acompanhamento Técnico — Análises dos Operadores")
-        conn = sqlite3.connect(CAMINHO_BANCO_REDE)
-        df_db_sem = pd.read_sql_query("SELECT * FROM analises_semanais ORDER BY data_registro DESC", conn)
-        conn.close()
+        engine = obter_engine()
+        df_db_sem = pd.read_sql_query("SELECT * FROM analises_semanais ORDER BY data_registro DESC", engine)
         
         if df_db_sem.empty:
             st.info("Nenhuma análise semanal encontrada no banco de dados local.")
@@ -708,27 +704,23 @@ if uploaded_file:
                     st.write("**Editar Plano:**")
                     e_oque = st.text_area("O quê (Plano)", value=str(row_s['plano_acao']))
                     e_quem = st.text_input("Quem (Responsável)", value=str(row_s['responsavel']))
-                    e_quando = st.text_input("Quando (Prazo)", value=str(row_s['quando']))
+                    e_quando = st.text_input("Quando (Prazo)", value=str(row_s['prazo']))
                     
                     st.markdown("---")
                     btn_col1, btn_col2 = st.columns(2)
                     with btn_col1:
                         if st.button("💾 SALVAR ATUALIZAÇÃO SEMANAL", use_container_width=True):
-                            conn = sqlite3.connect(CAMINHO_BANCO_REDE)
-                            cursor = conn.cursor()
-                            cursor.execute("""
-                                UPDATE analises_semanais SET pior_parada=?, status=?, maquina=?, pq1=?, pq2=?, pq3=?, pq4=?, pq5=?, causa_raiz=?, plano_acao=?, responsavel=?, prazo=? WHERE id=?
-                            """, (es_pior, es_status, es_maq, ep1, ep2, ep3, ep4, ep5, ep5, e_oque, e_quem, e_quando, int(id_sel_sem)))
-                            conn.commit(); conn.close()
+                            with engine.begin() as conn:
+                                conn.execute(text("""
+                                    UPDATE analises_semanais SET pior_parada=:pior, status=:status, maquina=:maq, pq1=:p1, pq2=:p2, pq3=:p3, pq4=:p4, pq5=:p5, causa_raiz=:causa, plano_acao=:plano, responsavel=:resp, prazo=:prazo WHERE id=:id
+                                """), {"pior": es_pior, "status": es_status, "maq": es_maq, "p1": ep1, "p2": ep2, "p3": ep3, "p4": ep4, "p5": ep5, "causa": ep5, "plano": e_oque, "resp": e_quem, "prazo": e_quando, "id": int(id_sel_sem)})
                             st.session_state['mostrar_edicao_semanal'] = False
                             st.success("🎉 Dados updated!")
                             st.rerun()
                     with btn_col2:
                         if st.button("❌ DELETAR ANÁLISE SEMANAL", type="primary", use_container_width=True):
-                            conn = sqlite3.connect(CAMINHO_BANCO_REDE)
-                            cursor = conn.cursor()
-                            cursor.execute("DELETE FROM analises_semanais WHERE id = ?", (int(id_sel_sem),))
-                            conn.commit(); conn.close()
+                            with engine.begin() as conn:
+                                conn.execute(text("DELETE FROM analises_semanais WHERE id = :id"), {"id": int(id_sel_sem)})
                             st.session_state['mostrar_edicao_semanal'] = False
                             st.success("Deletado do sistema!")
                             st.rerun()
@@ -763,13 +755,12 @@ if uploaded_file:
         with c_kpi2: st.plotly_chart(mini_gauge("Loss Semanal", loss_sem, "#e74c3c", 5, 140), use_container_width=True)
         with c_kpi3: st.markdown(f'<div class="metric-card" style="height:110px;"><div class="metric-title">Volume Realizado Semanal</div><div class="metric-value" style="font-size:1.8rem; margin-top:10px;">{fmt(pecas_sem)}</div></div>', unsafe_allow_html=True)
         
-        conn = sqlite3.connect(CAMINHO_BANCO_REDE)
-        df_query_db = pd.read_sql_query("""
+        engine = obter_engine()
+        df_query_db = pd.read_sql_query(text("""
             SELECT * FROM analises_semanais 
-            WHERE maquina = ? AND turno = ? AND data_registro >= ? AND data_registro <= ?
+            WHERE maquina = :maq AND turno = :turno AND data_registro >= :d_ini AND data_registro <= :d_fim
             ORDER BY data_registro DESC LIMIT 1
-        """, conn, params=(maq_ap, turno_ap, str(periodo_ap[0]), str(periodo_ap[1])))
-        conn.close()
+        """), engine, params={"maq": maq_ap, "turno": turno_ap, "d_ini": str(periodo_ap[0]), "d_fim": str(periodo_ap[1])})
         
         col_la, col_lb = st.columns([2, 1])
         with col_la:
@@ -865,24 +856,20 @@ if uploaded_file:
                 if not coordenador_nippo or not tecnico_nippo:
                     st.error("Não é possível salvar. Os campos Coordenador e Técnico são obrigatórios.")
                 else:
-                    conn = sqlite3.connect(CAMINHO_BANCO_REDE)
-                    cursor = conn.cursor()
+                    engine = obter_engine()
                     try:
-                        for m_item, dados in mapa_inputs_maquinas.items():
-                            cursor.execute("""
-                                INSERT INTO nippo_coordenadores 
-                                (data, turno, coordenador, tecnico, maquina, itens_compartilhar, produtividade, loss, sku, palete_inicial, palete_final, total_ordem)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """, (str(data_nippo), turno_nippo, coordenador_nippo, tecnico_nippo, m_item,
-                                dados["itens"], dados["prod"], dados["loss"], dados["sku"], dados["pal_ini"], dados["pal_fim"], int(dados["tot"])))
-                        conn.commit()
+                        with engine.begin() as conn:
+                            for m_item, dados in mapa_inputs_maquinas.items():
+                                conn.execute(text("""
+                                    INSERT INTO nippo_coordenadores 
+                                    (data, turno, coordenador, tecnico, maquina, itens_compartilhar, produtividade, loss, sku, palete_inicial, palete_final, total_ordem)
+                                    VALUES (:data, :turno, :coord, :tec, :maq, :itens, :prod, :loss, :sku, :p_ini, :p_fim, :tot)
+                                """), {"data": str(data_nippo), "turno": turno_nippo, "coord": coordenador_nippo, "tec": tecnico_nippo, "maq": m_item, "itens": dados["itens"], "prod": dados["prod"], "loss": dados["loss"], "sku": dados["sku"], "p_ini": dados["pal_ini"], "p_fim": dados["pal_fim"], "tot": int(dados["tot"])})
                         st.session_state['contador_nippo'] += 1
                         st.success("🎉 O Nippo completo foi gravado e as caixas de texto foram limpas!")
                         st.rerun()
                     except Exception as error:
                         st.error(f"Falha operacional na gravação: {error}")
-                    finally:
-                        conn.close()
                         
         with aba_consultar:
             st.subheader("🔍 Filtros de Pesquisa Histórica")
@@ -891,19 +878,18 @@ if uploaded_file:
             with c_f2: query_turno = st.selectbox("Filtrar Turno", ["Todos", "1º Turno", "2º Turno", "3º Turno"], index=0)
             with c_f3: query_maq = st.selectbox("Filtrar Máquina", ["Todas", "M1", "M2", "M3", "M4", "M5", "M6", "M7"], index=0)
                 
-            conn = sqlite3.connect(CAMINHO_BANCO_REDE)
-            sql_txt = "SELECT id, data, turno, coordenador, tecnico, maquina, itens_compartilhar, sku, produtividade, loss, palete_inicial, palete_final, total_ordem FROM nippo_coordenadores WHERE data = ?"
-            parametros_filtro = [str(query_data)]
+            engine = obter_engine()
+            sql_txt = "SELECT id, data, turno, coordenador, tecnico, maquina, itens_compartilhar, sku, produtividade, loss, palete_inicial, palete_final, total_ordem FROM nippo_coordenadores WHERE data = :data"
+            p_filtro = {"data": str(query_data)}
             
             if query_turno != "Todos":
-                sql_txt += " AND turno = ?"
-                parametros_filtro.append(query_turno)
+                sql_txt += " AND turno = :turno"
+                p_filtro["turno"] = query_turno
             if query_maq != "Todas":
-                sql_txt += " AND maquina = ?"
-                parametros_filtro.append(query_maq)
+                sql_txt += " AND maquina = :maq"
+                p_filtro["maq"] = query_maq
                 
-            df_nippo_res = pd.read_sql_query(sql_txt, conn, params=parametros_filtro)
-            conn.close()
+            df_nippo_res = pd.read_sql_query(text(sql_txt), engine, params=p_filtro)
             
             if df_nippo_res.empty:
                 st.warning(f"Nenhum diário Nippo encontrado para o dia {query_data.strftime('%d/%m/%Y')}.")
@@ -926,9 +912,7 @@ if uploaded_file:
                 st.session_state['chave_nippo_edicao'] = chave_composta
                 st.session_state['mostrar_edicao_nippo'] = False
 
-            conn = sqlite3.connect(CAMINHO_BANCO_REDE)
-            df_atual_nippo = pd.read_sql_query("SELECT * FROM nippo_coordenadores WHERE data = ? AND turno = ?", conn, params=(str(target_data_ed), target_turno_ed))
-            conn.close()
+            df_atual_nippo = pd.read_sql_query(text("SELECT * FROM nippo_coordenadores WHERE data = :data AND turno = :turno"), engine, params={"data": str(target_data_ed), "turno": target_turno_ed})
 
             if df_atual_nippo.empty:
                 st.caption("Nenhum registro encontrado para a data e turno selecionados na área de modificação.")
@@ -994,33 +978,29 @@ if uploaded_file:
                     
                     with col_nippo_act1:
                         if st.button("💾 SALVAR ALTERAÇÕES DO NIPPO", use_container_width=True):
-                            conn = sqlite3.connect(CAMINHO_BANCO_REDE)
-                            cursor = conn.cursor()
-                            for m_key, e_dados in mapa_edicao_final.items():
-                                if e_dados["id"] is not None:
-                                    cursor.execute("""
-                                        UPDATE nippo_coordenadores 
-                                        SET coordenador=?, tecnico=?, itens_compartilhar=?, sku=?, produtividade=?, loss=?, palete_inicial=?, palete_final=?, total_ordem=?
-                                        WHERE id=?
-                                    """, (edit_nippo_coord, edit_nippo_tec, e_dados["itens"], e_dados["sku"], e_dados["prod"], e_dados["loss"], e_dados["pal_ini"], e_dados["pal_fim"], int(e_dados["tot"]), e_dados["id"]))
-                                else:
-                                    cursor.execute("""
-                                        INSERT INTO nippo_coordenadores (data, turno, coordenador, tecnico, maquina, itens_compartilhar, produtividade, loss, sku, palete_inicial, palete_final, total_ordem)
-                                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                    """, (str(data_nippo), turno_nippo, edit_nippo_coord, edit_nippo_tec, m_key, e_dados["itens"], e_dados["prod"], e_dados["loss"], e_dados["sku"], e_dados["pal_ini"], e_dados["pal_fim"], int(e_dados["tot"])))
-                            conn.commit(); conn.close()
+                            with engine.begin() as conn:
+                                for m_key, e_dados in mapa_edicao_final.items():
+                                    if e_dados["id"] is not None:
+                                        conn.execute(text("""
+                                            UPDATE nippo_coordenadores 
+                                            SET coordenador=:coord, tecnico=:tec, itens_compartilhar=:itens, sku=:sku, produtividade=:prod, loss=:loss, palete_inicial=:p_ini, palete_final=:p_fim, total_ordem=:tot
+                                            WHERE id=:id
+                                        """), {"coord": edit_nippo_coord, "tec": edit_nippo_tec, "itens": e_dados["itens"], "sku": e_dados["sku"], "prod": e_dados["prod"], "loss": e_dados["loss"], "p_ini": e_dados["pal_ini"], "p_fim": e_dados["pal_fim"], "tot": int(e_dados["tot"]), "id": e_dados["id"]})
+                                    else:
+                                        conn.execute(text("""
+                                            INSERT INTO nippo_coordenadores (data, turno, coordenador, tecnico, maquina, itens_compartilhar, produtividade, loss, sku, palete_inicial, palete_final, total_ordem)
+                                            VALUES (:data, :turno, :coord, :tec, :maq, :itens, :prod, :loss, :sku, :p_ini, :p_fim, :tot)
+                                        """), {"data": str(target_data_ed), "turno": target_turno_ed, "coord": edit_nippo_coord, "tec": edit_nippo_tec, "maq": m_key, "itens": e_dados["itens"], "prod": e_dados["prod"], "loss": e_dados["loss"], "sku": e_dados["sku"], "p_ini": e_dados["pal_ini"], "p_fim": e_dados["pal_fim"], "tot": int(e_dados["tot"])})
                             st.session_state['mostrar_edicao_nippo'] = False
-                            st.success("🎉 Todas as modificações de turno por máquina foram salvas com sucesso!")
+                            st.success("🎉 Todas as modificações foram salvas em nuvem!")
                             st.rerun()
                             
                     with col_nippo_act2:
                         if st.button("❌ EXCLUIR TURNO COMPLETO DEFINITIVAMENTE", type="primary", use_container_width=True):
-                            conn = sqlite3.connect(CAMINHO_BANCO_REDE)
-                            cursor = conn.cursor()
-                            cursor.execute("DELETE FROM nippo_coordenadores WHERE data = ? AND turno = ?", (str(target_data_ed), target_turno_ed))
-                            conn.commit(); conn.close()
+                            with engine.begin() as conn:
+                                conn.execute(text("DELETE FROM nippo_coordenadores WHERE data = :data AND turno = :turno"), {"data": str(target_data_ed), "turno": target_turno_ed})
                             st.session_state['mostrar_edicao_nippo'] = False
-                            st.success(f"O fechamento completo do turno {target_turno_ed} na data especificada foi deletado!")
+                            st.success("O fechamento completo foi deletado da nuvem!")
                             st.rerun()
 else:
     st.info("💡 Por favor, carregue os arquivos Excel para iniciar o Analytics Hub.")
