@@ -9,6 +9,12 @@ import sqlite3
 # 1. CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(layout="wide", page_title="Industrial Analytics Hub", page_icon="⚙️")
 
+# --- INICIALIZAÇÃO DE ESTADOS DO STREAMLIT (Para Controle de Visibilidade) ---
+if 'mostrar_edicao' not in st.session_state:
+    st.session_state['mostrar_edicao'] = False
+if 'id_atual' not in st.session_state:
+    st.session_state['id_atual'] = 0
+
 # =========================================================
 # BANCO DE DADOS LOCAL (SQLite)
 # =========================================================
@@ -462,7 +468,7 @@ if uploaded_file:
                     st.success("🎉 Reporte alocado e registrado com sucesso no banco de dados local!")
 
     # =========================================================
-    # ABA: ACOMPANHAMENTO (FIXED NAMEERROR TYPO)
+    # ABA: ACOMPANHAMENTO (COM CONTROLE DE MINIMIZAR INTELIGENTE)
     # =========================================================
     elif menu == "📊 ACOMPANHAMENTO":
         st.markdown("## 📊 Painel de Acompanhamento de Ações")
@@ -491,66 +497,88 @@ if uploaded_file:
             st.dataframe(df_filtrado_db[cols_exibicao].style.apply(colorir_linhas_por_status, axis=1), use_container_width=True)
             
             st.markdown("<div class='section-header'>✏️ Gerenciar / Editar Informações do Reporte</div>", unsafe_allow_html=True)
-            id_selecionado = st.number_input("Digite o ID do reporte para carregar o painel de edição:", min_value=1, step=1)
+            id_selecionado = st.number_input("Digite o ID do reporte para gerenciar:", min_value=1, step=1)
             
             if id_selecionado in df_db['id'].values:
-                row_sel = df_db[df_db['id'] == id_selecionado].iloc[0]
-                st.markdown(f"#### Editando Dados do ID: `{id_selecionado}`")
+                # Se o usuário alterar o número do ID digitado, redefinimos o painel para fechado por segurança
+                if id_selecionado != st.session_state['id_atual']:
+                    st.session_state['id_atual'] = id_selecionado
+                    st.session_state['mostrar_edicao'] = False
                 
-                # FIX COMPLETO: Variáveis corrigidas de e_col1/2/3 para e_c1/2/3 mapeando as colunas reais do st.columns
-                e_c1, e_c2, e_c3 = st.columns(3)
-                with e_c1:
-                    edit_coord = st.text_input("Editar Coordenador", value=str(row_sel['coordenador'])).upper()
-                with e_c2:
-                    edit_status = st.selectbox("Alterar Status", ["Pendente", "Em Andamento", "Resolvido"], index=["Pendente", "Em Andamento", "Resolvido"].index(row_sel['status']))
-                with e_c3:
-                    edit_maq = st.text_input("Editar Máquina Analisada", value=str(row_sel['maq_analisada'])).upper()
-                
-                edit_ocorrencias = st.text_area("Editar Ocorrências / Paradas do Turno", value=str(row_sel['ocorrencias']), height=100)
-                edit_problema = st.text_input("Editar Problema Foco", value=str(row_sel['problema']))
-                
-                st.write("**Editar Análise dos 5 Porquês:**")
-                epq1 = st.text_input("Por que 1?", value=str(row_sel['pq1']))
-                epq2 = st.text_input("Por que 2?", value=str(row_sel['pq2']))
-                epq3 = st.text_input("Por que 3?", value=str(row_sel['pq3']))
-                epq4 = st.text_input("Por que 4?", value=str(row_sel['pq4']))
-                epq5 = st.text_input("Por que 5? (Causa Raiz)", value=str(row_sel['pq5']))
-                
-                st.write("**Editar Plano de Ação:**")
-                ea_oque = st.text_area("O quê (Ação)", value=str(row_sel['oque']))
-                ea_quem = st.text_input("Quem (Responsável)", value=str(row_sel['quem']))
-                ea_quando = st.text_input("Quando (Prazo)", value=str(row_sel['quando']))
-                
-                st.markdown("---")
-                col_actions1, col_actions2 = st.columns(2)
-                
-                with col_actions1:
-                    if st.button("💾 SALVAR ALTERAÇÕES", use_container_width=True):
-                        conn = sqlite3.connect('reportes_turno.db')
-                        cursor = conn.cursor()
-                        cursor.execute("""
-                            UPDATE reportes 
-                            SET coordenador = ?, status = ?, maq_analisada = ?, ocorrencias = ?, problema = ?, 
-                                pq1 = ?, pq2 = ?, pq3 = ?, pq4 = ?, pq5 = ?, oque = ?, quem = ?, quando = ?
-                            WHERE id = ?
-                        """, (
-                            edit_coord, edit_status, edit_maq, edit_ocorrencias, edit_problema,
-                            epq1, epq2, epq3, epq4, epq5, ea_oque, ea_quem, ea_quando, int(id_selecionado)
-                        ))
-                        conn.commit()
-                        conn.close()
-                        st.success(f"🎉 Todas as informações do ID {id_selecionado} foram atualizadas com sucesso!")
+                # --- BOTÃO DE MINIMIZAR / EXPANDIR O FORMULÁRIO ---
+                if not st.session_state['mostrar_edicao']:
+                    if st.button("🔍 ABRIR PAINEL DE GERENCIAMENTO / EDICAO"):
+                        st.session_state['mostrar_edicao'] = True
+                        st.rerun()
+                else:
+                    if st.button("🔼 MINIMIZAR / FECHAR PAINEL DE EDIÇÃO"):
+                        st.session_state['mostrar_edicao'] = False
                         st.rerun()
                 
-                with col_actions2:
-                    if st.button("❌ EXCLUIR REPORTE DEFINITIVAMENTE", type="primary", use_container_width=True):
-                        conn = sqlite3.connect('reportes_turno.db')
-                        cursor = conn.cursor()
-                        cursor.execute("DELETE FROM reportes WHERE id = ?", (int(id_selecionado),))
-                        conn.commit()
-                        conn.close()
-                        st.success(f"O reporte de ID {id_selecionado} foi excluído com sucesso do banco de dados!")
-                        st.rerun()
+                # Renderiza o formulário somente se o estado 'mostrar_edicao' for True
+                if st.session_state['mostrar_edicao']:
+                    row_sel = df_db[df_db['id'] == id_selecionado].iloc[0]
+                    st.markdown(f"#### Editando Dados do ID: `{id_selecionado}`")
+                    
+                    e_c1, e_c2, e_c3 = st.columns(3)
+                    with e_c1:
+                        edit_coord = st.text_input("Editar Coordenador", value=str(row_sel['coordenador'])).upper()
+                    with e_c2:
+                        edit_status = st.selectbox("Alterar Status", ["Pendente", "Em Andamento", "Resolvido"], index=["Pendente", "Em Andamento", "Resolvido"].index(row_sel['status']))
+                    with e_c3:
+                        edit_maq = st.text_input("Editar Máquina Analisada", value=str(row_sel['maq_analisada'])).upper()
+                    
+                    edit_ocorrencias = st.text_area("Editar Ocorrências / Paradas do Turno", value=str(row_sel['ocorrencias']), height=100)
+                    edit_problema = st.text_input("Editar Problema Foco", value=str(row_sel['problema']))
+                    
+                    st.write("**Editar Análise dos 5 Porquês:**")
+                    epq1 = st.text_input("Por que 1?", value=str(row_sel['pq1']))
+                    epq2 = st.text_input("Por que 2?", value=str(row_sel['pq2']))
+                    epq3 = st.text_input("Por que 3?", value=str(row_sel['pq3']))
+                    epq4 = st.text_input("Por que 4?", value=str(row_sel['pq4']))
+                    epq5 = st.text_input("Por que 5? (Causa Raiz)", value=str(row_sel['pq5']))
+                    
+                    st.write("**Editar Plano de Ação:**")
+                    ea_oque = st.text_area("O quê (Ação)", value=str(row_sel['oque']))
+                    ea_quem = st.text_input("Quem (Responsável)", value=str(row_sel['quem']))
+                    ea_quando = st.text_input("Quando (Prazo)", value=str(row_sel['quando']))
+                    
+                    st.markdown("---")
+                    col_actions1, col_actions2 = st.columns(2)
+                    
+                    with col_actions1:
+                        if st.button("💾 SALVAR ALTERAÇÕES", use_container_width=True):
+                            conn = sqlite3.connect('reportes_turno.db')
+                            cursor = conn.cursor()
+                            cursor.execute("""
+                                UPDATE reportes 
+                                SET coordenador = ?, status = ?, maq_analisada = ?, ocorrencias = ?, problema = ?, 
+                                    pq1 = ?, pq2 = ?, pq3 = ?, pq4 = ?, pq5 = ?, oque = ?, quem = ?, quando = ?
+                                WHERE id = ?
+                            """, (
+                                edit_coord, edit_status, edit_maq, edit_ocorrencias, edit_problema,
+                                epq1, epq2, epq3, epq4, epq5, ea_oque, ea_quem, ea_quando, int(id_selecionado)
+                            ))
+                            conn.commit()
+                            conn.close()
+                            
+                            # Auto-minimiza após salvar
+                            st.session_state['mostrar_edicao'] = False
+                            st.success(f"🎉 Todas as informações do ID {id_selecionado} foram atualizadas com sucesso!")
+                            st.rerun()
+                    
+                    with col_actions2:
+                        if st.button("❌ EXCLUIR REPORTE DEFINITIVAMENTE", type="primary", use_container_width=True):
+                            conn = sqlite3.connect('reportes_turno.db')
+                            cursor = conn.cursor()
+                            cursor.execute("DELETE FROM reportes WHERE id = ?", (int(id_selecionado),))
+                            conn.commit()
+                            conn.close()
+                            
+                            # Auto-minimiza após excluir
+                            st.session_state['mostrar_edicao'] = False
+                            st.success(f"O reporte de ID {id_selecionado} foi excluído com sucesso do banco de dados!")
+                            st.rerun()
             else:
                 st.caption("Insira um ID válido presente na tabela acima para gerenciar ou editar.")
 else:
