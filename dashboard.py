@@ -462,7 +462,7 @@ if uploaded_file:
                     st.success("🎉 Reporte alocado e registrado com sucesso no banco de dados local!")
 
     # =========================================================
-    # ABA: ACOMPANHAMENTO (COM COLORIZAÇÃO DAS LINHAS SOLICITADA)
+    # ABA: ACOMPANHAMENTO (EDICAO DINÂMICA COMPLETA + EXCLUSÃO)
     # =========================================================
     elif menu == "📊 ACOMPANHAMENTO":
         st.markdown("## 📊 Painel de Acompanhamento de Ações")
@@ -478,43 +478,78 @@ if uploaded_file:
             with f_col2: filtro_turno = st.multiselect("Filtrar por Turno", df_db['turno'].unique(), default=df_db['turno'].unique())
             df_filtrado_db = df_db[(df_db['status'].isin(filtro_status)) & (df_db['turno'].isin(filtro_turno))].copy()
             
-            # ALTERAÇÃO: Função interna para colorização dinâmica das linhas com base no Status
             def colorir_linhas_por_status(row):
                 if row['status'] == 'Pendente':
-                    return ['background-color: #fee2e2; color: #b91c1c; font-weight: 600'] * len(row) # Vermelho Suave
+                    return ['background-color: #fee2e2; color: #b91c1c; font-weight: 600'] * len(row)
                 elif row['status'] == 'Em Andamento':
-                    return ['background-color: #fef3c7; color: #d97706; font-weight: 600'] * len(row) # Amarelo Suave
+                    return ['background-color: #fef3c7; color: #d97706; font-weight: 600'] * len(row)
                 elif row['status'] == 'Resolvido':
-                    return ['background-color: #dcfce7; color: #15803d; font-weight: 600'] * len(row) # Verde Suave
+                    return ['background-color: #dcfce7; color: #15803d; font-weight: 600'] * len(row)
                 return [''] * len(row)
 
             cols_exibicao = ['id', 'data_registro', 'turno', 'coordenador', 'maq_analisada', 'problema', 'quem', 'quando', 'status']
-            
-            # Renderiza o dataframe aplicando o estilo de cores
             st.dataframe(df_filtrado_db[cols_exibicao].style.apply(colorir_linhas_por_status, axis=1), use_container_width=True)
             
-            st.markdown("<div class='section-header'>Gerenciar Reporte Existente</div>", unsafe_allow_html=True)
-            id_selecionado = st.number_input("Digite o ID do reporte para gerenciar:", min_value=1, step=1)
+            st.markdown("<div class='section-header'>✏️ Gerenciar / Editar Informações do Reporte</div>", unsafe_allow_html=True)
+            id_selecionado = st.number_input("Digite o ID do reporte para carregar o painel de edição:", min_value=1, step=1)
             
             if id_selecionado in df_db['id'].values:
+                # Recupera os dados da linha selecionada do banco
                 row_sel = df_db[df_db['id'] == id_selecionado].iloc[0]
-                st.info(f"**Máquina:** {row_sel['maq_analisada']} | **Problema:** {row_sel['problema']} | **Ação:** {row_sel['oque']}")
                 
-                col_btn1, col_btn2 = st.columns(2)
-                with col_btn1:
-                    novo_status = st.selectbox("Selecione o Novo Status:", ["Pendente", "Em Andamento", "Resolvido"], index=["Pendente", "Em Andamento", "Resolvido"].index(row_sel['status']))
-                    if st.button("🔄 ATUALIZAR STATUS NO BANCO"):
+                st.markdown(f"#### Editando Dados do ID: `{id_selecionado}`")
+                
+                # Formula o painel de inputs preenchidos com os dados atuais para edição
+                e_c1, e_c2, e_c3 = st.columns(3)
+                with e_col1:
+                    edit_coord = st.text_input("Editar Coordenador", value=str(row_sel['coordenador'])).upper()
+                with e_col2:
+                    edit_status = st.selectbox("Alterar Status", ["Pendente", "Em Andamento", "Resolvido"], index=["Pendente", "Em Andamento", "Resolvido"].index(row_sel['status']))
+                with e_col3:
+                    edit_maq = st.text_input("Editar Máquina Analisada", value=str(row_sel['maq_analisada'])).upper()
+                
+                edit_ocorrencias = st.text_area("Editar Ocorrências / Paradas do Turno", value=str(row_sel['ocorrencias']), height=100)
+                edit_problema = st.text_input("Editar Problema Foco", value=str(row_sel['problema']))
+                
+                # Edição dos 5 porquês
+                st.write("**Editar Análise dos 5 Porquês:**")
+                epq1 = st.text_input("Por que 1?", value=str(row_sel['pq1']))
+                epq2 = st.text_input("Por que 2?", value=str(row_sel['pq2']))
+                epq3 = st.text_input("Por que 3?", value=str(row_sel['pq3']))
+                epq4 = st.text_input("Por que 4?", value=str(row_sel['pq4']))
+                epq5 = st.text_input("Por que 5? (Causa Raiz)", value=str(row_sel['pq5']))
+                
+                # Edição das ações
+                st.write("**Editar Plano de Ação:**")
+                ea_oque = st.text_area("O quê (Ação)", value=str(row_sel['oque']))
+                ea_quem = st.text_input("Quem (Responsável)", value=str(row_sel['quem']))
+                ea_quando = st.text_input("Quando (Prazo)", value=str(row_sel['quando']))
+                
+                st.markdown("---")
+                col_actions1, col_actions2 = st.columns(2)
+                
+                # Ação 1: Salvar alterações de todos os campos editados
+                with col_actions1:
+                    if st.button("💾 SALVAR ALTERAÇÕES", use_container_width=True):
                         conn = sqlite3.connect('reportes_turno.db')
                         cursor = conn.cursor()
-                        cursor.execute("UPDATE reportes SET status = ? WHERE id = ?", (novo_status, int(id_selecionado)))
+                        cursor.execute("""
+                            UPDATE reportes 
+                            SET coordenador = ?, status = ?, maq_analisada = ?, ocorrencias = ?, problema = ?, 
+                                pq1 = ?, pq2 = ?, pq3 = ?, pq4 = ?, pq5 = ?, oque = ?, quem = ?, quando = ?
+                            WHERE id = ?
+                        """, (
+                            edit_coord, edit_status, edit_maq, edit_ocorrencias, edit_problema,
+                            epq1, epq2, epq3, epq4, epq5, ea_oque, ea_quem, ea_quando, int(id_selecionado)
+                        ))
                         conn.commit()
                         conn.close()
-                        st.success(f"Status do ID {id_selecionado} alterado para {novo_status}!")
+                        st.success(f"🎉 Todas as informações do ID {id_selecionado} foram atualizadas com sucesso!")
                         st.rerun()
                 
-                with col_btn2:
-                    st.write("### EXCLUSÃO DO REPORTE")
-                    if st.button("❌ EXCLUIR REPORTE DEFINITIVAMENTE", type="primary"):
+                # Ação 2: Exclusão definitiva do registro
+                with col_actions2:
+                    if st.button("❌ EXCLUIR REPORTE DEFINITIVAMENTE", type="primary", use_container_width=True):
                         conn = sqlite3.connect('reportes_turno.db')
                         cursor = conn.cursor()
                         cursor.execute("DELETE FROM reportes WHERE id = ?", (int(id_selecionado),))
@@ -523,6 +558,6 @@ if uploaded_file:
                         st.success(f"O reporte de ID {id_selecionado} foi excluído com sucesso do banco de dados!")
                         st.rerun()
             else:
-                st.caption("Insira um ID válido presente na tabela acima para gerenciar.")
+                st.caption("Insira um ID válido presente na tabela acima para gerenciar ou editar.")
 else:
     st.info("💡 Por favor, carregue os arquivos Excel para iniciar.")
