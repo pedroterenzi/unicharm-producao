@@ -15,12 +15,18 @@ if 'mostrar_edicao' not in st.session_state:
 if 'id_atual' not in st.session_state:
     st.session_state['id_atual'] = 0
 
+if 'mostrar_edicao_semanal' not in st.session_state:
+    st.session_state['mostrar_edicao_semanal'] = False
+if 'id_atual_semanal' not in st.session_state:
+    st.session_state['id_atual_semanal'] = 0
+
 # =========================================================
 # BANCO DE DADOS LOCAL (SQLite)
 # =========================================================
 def init_db():
     conn = sqlite3.connect('reportes_turno.db')
     cursor = conn.cursor()
+    # Tabela 1: Reportes Diários de Turno
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS reportes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,6 +40,22 @@ def init_db():
             oque TEXT,
             quem TEXT,
             quando TEXT,
+            status TEXT
+        )
+    """)
+    # Tabela 2: Novas Análises Semanais dos Operadores
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS analises_semanais (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            data_registro TEXT,
+            turno TEXT,
+            maquina TEXT,
+            pior_parada TEXT,
+            pq1 TEXT, pq2 TEXT, pq3 TEXT, pq4 TEXT, pq5 TEXT,
+            causa_raiz TEXT,
+            plano_acao TEXT,
+            prazo TEXT,
+            responsavel TEXT,
             status TEXT
         )
     """)
@@ -64,7 +86,6 @@ st.markdown("""
     /* --- MENU LATERAL ULTRA MODERNO E PADRONIZADO --- */
     [data-testid="stSidebar"] { background-color: #f8fafc; border-right: 1px solid #e2e8f0; }
     
-    /* Forçar o container do radio button a ocupar 100% da largura interna */
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] {
         display: flex;
         flex-direction: column;
@@ -72,21 +93,18 @@ st.markdown("""
         width: 100%;
     }
     
-    /* Estilização perfeita dos botões: Todos RIGOROSAMENTE do mesmo tamanho */
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label {
         background-color: #ffffff !important; 
         border: 1px solid #e2e8f0 !important;
-        padding: 14px 20px !important; 
+        padding: 12px 18px !important; 
         border-radius: 10px !important;
-        margin-bottom: 6px !important; 
+        margin-bottom: 5px !important; 
         color: #475569 !important; 
         cursor: pointer;
         font-weight: 500;
-        font-size: 0.85rem;
+        font-size: 0.82rem;
         transition: all 0.2s ease-in-out;
         box-shadow: 0 1px 2px rgba(0,0,0,0.02) !important;
-        
-        /* Garantia de padronização de tamanho */
         display: flex !important;
         align-items: center;
         justify-content: flex-start;
@@ -94,7 +112,6 @@ st.markdown("""
         box-sizing: border-box !important;
     }
     
-    /* Efeito de Hover Moderno (Ao passar o mouse) */
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label:hover {
         background-color: #f1f5f9 !important;
         border-color: #cbd5e1 !important;
@@ -102,7 +119,6 @@ st.markdown("""
         transform: translateX(2px);
     }
     
-    /* Botão Ativo Premium com Degradê de Alta Definição */
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label[data-checked="true"] {
         background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; 
         color: #ffffff !important; 
@@ -111,7 +127,6 @@ st.markdown("""
         box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2) !important;
     }
     
-    /* Esconde a bolinha original do radio button nativo do Streamlit */
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label icon {
         display: none !important;
     }
@@ -224,12 +239,23 @@ def load_planner_metas_advanced(file, data_ref):
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.markdown("<h1 style='font-size:1.6rem; color:#10b981; font-weight:900; margin-bottom:15px; text-align:center;'>🏭 ANALYTICS HUB</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='font-size:1.4rem; color:#10b981; font-weight:900; margin-bottom:15px; text-align:center;'>🏭 ANALYTICS HUB</h1>", unsafe_allow_html=True)
     uploaded_file = st.file_uploader("📂 Carregar Excel Produção (.xlsm)", type=["xlsm"])
     up_datas = st.file_uploader("📂 Carregar Excel DATAS (.xlsx)", type=["xlsx"])
     st.markdown("---")
     if uploaded_file:
-        menu = st.radio("NAVEGAÇÃO", ["📋 REPORTE DIÁRIO", "📈 PERFORMANCE", "🛑 TOP 10 PARADAS", "📅 CALENDÁRIO", "📋 ANÁLISE SEMANAL", "📝 LANÇAR REPORTE", "📊 ACOMPANHAMENTO"])
+        menu = st.radio("NAVEGAÇÃO", [
+            "📋 REPORTE DIÁRIO", 
+            "📈 PERFORMANCE", 
+            "🛑 TOP 10 PARADAS", 
+            "📅 CALENDÁRIO", 
+            "📋 ANÁLISE SEMANAL", 
+            "📝 LANÇAR REPORTE", 
+            "📊 ACOMPANHAMENTO",
+            "📝 LANÇAR ANÁLISE SEMANAL", 
+            "📋 ACOMP. ANÁLISES SEMANAIS", 
+            "📊 APRESENTAÇÃO SEMANAL"
+        ])
 
 if uploaded_file:
     df_order, df_stops = load_data(uploaded_file)
@@ -387,7 +413,7 @@ if uploaded_file:
         st.markdown(html_grid + '</div>', unsafe_allow_html=True)
 
     # =========================================================
-    # ABA: ANÁLISE SEMANAL
+    # ABA: ANÁLISE SEMANAL (PADRÃO OPERADOR)
     # =========================================================
     elif menu == "📋 ANÁLISE SEMANAL":
         st.sidebar.subheader("Filtros Board")
@@ -406,7 +432,7 @@ if uploaded_file:
             <p style="color:#64748b; font-size:1rem;">Período: {periodo_b[0].strftime('%d/%m')} a {periodo_b[1].strftime('%d/%m/%Y')}</p></div>""", unsafe_allow_html=True)
 
         m_v = (df_b["Run Time"].sum()/df_b["Horário Padrão"].replace(0,1).sum()*100)
-        l_v = ((df_b["Machine Counter"].sum()-df_b["Peças Estoque - Ajuste"].sum())/df_b["Machine Counter"].replace(0,1).sum()*100)
+        l_v = ((df_b["Machine Counter"].sum()-df_b["Peças Estoque - Ajuste'].sum())/df_b["Machine Counter"].replace(0,1).sum()*100)
         pecas_v = df_b["Peças Estoque - Ajuste"].sum()
 
         v1, v2, v3 = st.columns([1, 1, 1])
@@ -448,7 +474,7 @@ if uploaded_file:
             <b>CAUSA RAIZ / PLANO DE AÇÃO:</b> <div class="five-why-line"></div><div class="five-why-line"></div></div>""", unsafe_allow_html=True)
 
     # =========================================================
-    # ABA: LANÇAR REPORTE
+    # ABA: LANÇAR REPORTE DIÁRIO
     # =========================================================
     elif menu == "📝 LANÇAR REPORTE":
         st.markdown("## 📝 Formulário de Registro de Turno")
@@ -478,7 +504,7 @@ if uploaded_file:
             
             if submit:
                 if not coord_rep or not prob_an:
-                    st.error("Por favor, preencha os campos essenciais como Coordenador e Problema Foco.")
+                    st.error("Por favor, preencha os campos essenciais.")
                 else:
                     conn = sqlite3.connect('reportes_turno.db')
                     cursor = conn.cursor()
@@ -488,10 +514,10 @@ if uploaded_file:
                     """, (str(data_rep), turno_rep, coord_rep, txt_ocorrencias, maq_an, prob_an, p1, p2, p3, p4, p5, action_oque, action_quem, action_quando, status_inicial))
                     conn.commit()
                     conn.close()
-                    st.success("🎉 Reporte alocado e registrado com sucesso no banco de dados local!")
+                    st.success("🎉 Reporte alocado com sucesso!")
 
     # =========================================================
-    # ABA: ACOMPANHAMENTO
+    # ABA: ACOMPANHAMENTO DIÁRIO
     # =========================================================
     elif menu == "📊 ACOMPANHAMENTO":
         st.markdown("## 📊 Painel de Acompanhamento de Ações")
@@ -508,16 +534,12 @@ if uploaded_file:
             df_filtrado_db = df_db[(df_db['status'].isin(filtro_status)) & (df_db['turno'].isin(filtro_turno))].copy()
             
             def colorir_linhas_por_status(row):
-                if row['status'] == 'Pendente':
-                    return ['background-color: #fee2e2; color: #b91c1c; font-weight: 600'] * len(row)
-                elif row['status'] == 'Em Andamento':
-                    return ['background-color: #fef3c7; color: #d97706; font-weight: 600'] * len(row)
-                elif row['status'] == 'Resolvido':
-                    return ['background-color: #dcfce7; color: #15803d; font-weight: 600'] * len(row)
+                if row['status'] == 'Pendente': return ['background-color: #fee2e2; color: #b91c1c; font-weight: 600'] * len(row)
+                elif row['status'] == 'Em Andamento': return ['background-color: #fef3c7; color: #d97706; font-weight: 600'] * len(row)
+                elif row['status'] == 'Resolvido': return ['background-color: #dcfce7; color: #15803d; font-weight: 600'] * len(row)
                 return [''] * len(row)
 
-            cols_exibicao = ['id', 'data_registro', 'turno', 'coordenador', 'maq_analisada', 'problema', 'quem', 'quando', 'status']
-            st.dataframe(df_filtrado_db[cols_exibicao].style.apply(colorir_linhas_por_status, axis=1), use_container_width=True)
+            st.dataframe(df_filtrado_db[['id', 'data_registro', 'turno', 'coordenador', 'maq_analisada', 'problema', 'quem', 'quando', 'status']].style.apply(colorir_linhas_por_status, axis=1), use_container_width=True)
             
             st.markdown("<div class='section-header'>✏️ Gerenciar / Editar Informações do Reporte</div>", unsafe_allow_html=True)
             id_selecionado = st.number_input("Digite o ID do reporte para gerenciar:", min_value=1, step=1)
@@ -538,63 +560,269 @@ if uploaded_file:
                 
                 if st.session_state['mostrar_edicao']:
                     row_sel = df_db[df_db['id'] == id_selecionado].iloc[0]
-                    st.markdown(f"#### Editando Dados do ID: `{id_selecionado}`")
-                    
                     e_c1, e_c2, e_c3 = st.columns(3)
-                    with e_c1:
-                        edit_coord = st.text_input("Editar Coordenador", value=str(row_sel['coordenador'])).upper()
-                    with e_c2:
-                        edit_status = st.selectbox("Alterar Status", ["Pendente", "Em Andamento", "Resolvido"], index=["Pendente", "Em Andamento", "Resolvido"].index(row_sel['status']))
-                    with e_c3:
-                        edit_maq = st.text_input("Editar Máquina Analisada", value=str(row_sel['maq_analisada'])).upper()
+                    with e_c1: edit_coord = st.text_input("Editar Coordenador", value=str(row_sel['coordenador'])).upper()
+                    with e_c2: edit_status = st.selectbox("Alterar Status", ["Pendente", "Em Andamento", "Resolvido"], index=["Pendente", "Em Andamento", "Resolvido"].index(row_sel['status']))
+                    with e_c3: edit_maq = st.text_input("Editar Máquina Analisada", value=str(row_sel['maq_analisada'])).upper()
                     
-                    edit_ocorrencias = st.text_area("Editar Ocorrências / Paradas do Turno", value=str(row_sel['ocorrencias']), height=100)
+                    edit_ocorrencias = st.text_area("Editar Ocorrências", value=str(row_sel['ocorrencias']), height=100)
                     edit_problema = st.text_input("Editar Problema Foco", value=str(row_sel['problema']))
-                    
-                    st.write("**Editar Análise dos 5 Porquês:**")
                     epq1 = st.text_input("Por que 1?", value=str(row_sel['pq1']))
                     epq2 = st.text_input("Por que 2?", value=str(row_sel['pq2']))
                     epq3 = st.text_input("Por que 3?", value=str(row_sel['pq3']))
                     epq4 = st.text_input("Por que 4?", value=str(row_sel['pq4']))
                     epq5 = st.text_input("Por que 5? (Causa Raiz)", value=str(row_sel['pq5']))
-                    
-                    st.write("**Editar Plano de Ação:**")
                     ea_oque = st.text_area("O quê (Ação)", value=str(row_sel['oque']))
-                    ea_quem = st.text_input("Quem (Responsável)", value=str(row_sel['quem']))
-                    ea_quando = st.text_input("Quando (Prazo)", value=str(row_sel['quando']))
+                    ea_quem = st.text_input("Quem", value=str(row_sel['quem']))
+                    ea_quando = st.text_input("Quando", value=str(row_sel['quando']))
                     
                     st.markdown("---")
                     col_actions1, col_actions2 = st.columns(2)
-                    
                     with col_actions1:
                         if st.button("💾 SALVAR ALTERAÇÕES", use_container_width=True):
                             conn = sqlite3.connect('reportes_turno.db')
                             cursor = conn.cursor()
                             cursor.execute("""
-                                UPDATE reportes 
-                                SET coordenador = ?, status = ?, maq_analisada = ?, ocorrencias = ?, problema = ?, 
-                                    pq1 = ?, pq2 = ?, pq3 = ?, pq4 = ?, pq5 = ?, oque = ?, quem = ?, quando = ?
-                                WHERE id = ?
+                                UPDATE reportes SET coordenador=?, status=?, maq_analisada=?, ocorrencias=?, problema=?, 
+                                pq1=?, pq2=?, pq3=?, pq4=?, pq5=?, oque=?, quem=?, quando=? WHERE id=?
                             """, (edit_coord, edit_status, edit_maq, edit_ocorrencias, edit_problema, epq1, epq2, epq3, epq4, epq5, ea_oque, ea_quem, ea_quando, int(id_selecionado)))
-                            conn.commit()
-                            conn.close()
-                            
+                            conn.commit(); conn.close()
                             st.session_state['mostrar_edicao'] = False
-                            st.success(f"🎉 Todas as informações do ID {id_selecionado} foram updated com sucesso!")
+                            st.success("🎉 Atualizado!")
                             st.rerun()
-                    
                     with col_actions2:
                         if st.button("❌ EXCLUIR REPORTE DEFINITIVAMENTE", type="primary", use_container_width=True):
                             conn = sqlite3.connect('reportes_turno.db')
                             cursor = conn.cursor()
                             cursor.execute("DELETE FROM reportes WHERE id = ?", (int(id_selecionado),))
-                            conn.commit()
-                            conn.close()
-                            
+                            conn.commit(); conn.close()
                             st.session_state['mostrar_edicao'] = False
-                            st.success(f"O reporte de ID {id_selecionado} foi excluído com sucesso do banco de dados!")
+                            st.success("Excluído!")
                             st.rerun()
+
+    # =========================================================
+    # NOVA ABA: LANÇAR ANÁLISE SEMANAL (OPERADORES)
+    # =========================================================
+    elif menu == "📝 LANÇAR ANÁLISE SEMANAL":
+        st.markdown("## 📝 Formulário de Lançamento — Análise Semanal (Operadores)")
+        st.write("Utilize esta aba para registrar a análise completa de causa raiz estruturada da semana.")
+        
+        with st.form("form_analise_semanal", clear_on_submit=True):
+            s1, s2, s3 = st.columns(3)
+            with s1:
+                semana_ref = st.date_input("Semana de Referência (Início/Data)", datetime.now().date())
+            with s2:
+                turno_sem = st.selectbox("Turno Analisado", ["T1", "T2", "T3"], key='ts_sem')
+            with s3:
+                maq_sem = st.selectbox("Máquina Alvo", sorted(df_order['Máquina'].unique()), key='mq_sem')
+                
+            pior_parada_sem = st.text_input("Pior Parada Detectada (Ofensor da Semana)")
+            
+            st.markdown("<div class='section-header'>Análise Causa Raiz — Método dos 5 Porquês</div>", unsafe_allow_html=True)
+            spq1 = st.text_input("1º Por que?")
+            spq2 = st.text_input("2º Por que?")
+            spq3 = st.text_input("3º Por que?")
+            spq4 = st.text_input("4º Por que?")
+            spq5 = st.text_input("5º Por que? (Causa Raiz)")
+            
+            st.markdown("<div class='section-header'>Plano de Ação Semanal Bloqueante</div>", unsafe_allow_html=True)
+            sa_oque = st.text_area("O quê (Plano de Ação)")
+            sa_quem = st.text_input("Responsável (Quem)")
+            sa_quando = st.text_input("Prazo Final (Quando)")
+            sa_status = st.selectbox("Status Operacional", ["Pendente", "Em Andamento", "Resolvido"])
+            
+            submit_sem = st.form_submit_button("💾 REGISTRAR ANÁLISE SEMANAL NO BANCO")
+            
+            if submit_sem:
+                if not pior_parada_sem or not spq5:
+                    st.error("Campos essenciais como Pior Parada e Causa Raiz (5º Por que) devem ser informados.")
+                else:
+                    conn = sqlite3.connect('reportes_turno.db')
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        INSERT INTO analises_semanais (data_registro, turno, maquina, pior_parada, pq1, pq2, pq3, pq4, pq5, causa_raiz, plano_acao, prazo, responsavel, status)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (str(semana_ref), turno_sem, maq_sem, pior_parada_sem, spq1, spq2, spq3, spq4, spq5, spq5, sa_oque, sa_quando, sa_quem, sa_status))
+                    conn.commit(); conn.close()
+                    st.success("🎉 Análise semanal gravada de forma definitiva no banco de dados!")
+
+    # =========================================================
+    # NOVA ABA: ACOMPANHAMENTO ANÁLISES SEMANAIS
+    # =========================================================
+    elif menu == "📋 ACOMP. ANÁLISES SEMANAIS":
+        st.markdown("## 📋 Acompanhamento Técnico — Análises dos Operadores")
+        conn = sqlite3.connect('reportes_turno.db')
+        df_db_sem = pd.read_sql_query("SELECT * FROM analises_semanais ORDER BY data_registro DESC", conn)
+        conn.close()
+        
+        if df_db_sem.empty:
+            st.info("Nenhuma análise semanal encontrada no banco de dados local.")
+        else:
+            col_fs1, col_fs2 = st.columns(2)
+            with col_fs1: status_f = st.multiselect("Filtrar Status", df_db_sem['status'].unique(), default=df_db_sem['status'].unique(), key='sf1')
+            with col_fs2: turno_f = st.multiselect("Filtrar Turno", df_db_sem['turno'].unique(), default=df_db_sem['turno'].unique(), key='tf1')
+            
+            df_f_sem = df_db_sem[(df_db_sem['status'].isin(status_f)) & (df_db_sem['turno'].isin(turno_f))]
+            
+            def colorir_linhas_por_status(row):
+                if row['status'] == 'Pendente': return ['background-color: #fee2e2; color: #b91c1c; font-weight: 600'] * len(row)
+                elif row['status'] == 'Em Andamento': return ['background-color: #fef3c7; color: #d97706; font-weight: 600'] * len(row)
+                elif row['status'] == 'Resolvido': return ['background-color: #dcfce7; color: #15803d; font-weight: 600'] * len(row)
+                return [''] * len(row)
+
+            cols_ex = ['id', 'data_registro', 'turno', 'maquina', 'pior_parada', 'responsavel', 'prazo', 'status']
+            st.dataframe(df_f_sem[cols_ex].style.apply(colorir_linhas_por_status, axis=1), use_container_width=True)
+            
+            st.markdown("<div class='section-header'>✏️ Central de Gerenciamento da Análise Semanal</div>", unsafe_allow_html=True)
+            id_sel_sem = st.number_input("Digite o ID da Análise Semanal para gerenciar:", min_value=1, step=1, key='id_num_sem')
+            
+            if id_sel_sem in df_db_sem['id'].values:
+                if id_sel_sem != st.session_state['id_atual_semanal']:
+                    st.session_state['id_atual_semanal'] = id_sel_sem
+                    st.session_state['mostrar_edicao_semanal'] = False
+                    
+                if not st.session_state['mostrar_edicao_semanal']:
+                    if st.button("🔍 ABRIR PAINEL DE EDIÇÃO DA ANÁLISE"):
+                        st.session_state['mostrar_edicao_semanal'] = True
+                        st.rerun()
+                else:
+                    if st.button("🔼 MINIMIZAR / FECHAR PAINEL DE EDIÇÃO"):
+                        st.session_state['mostrar_edicao_semanal'] = False
+                        st.rerun()
+                        
+                if st.session_state['mostrar_edicao_semanal']:
+                    row_s = df_db_sem[df_db_sem['id'] == id_sel_sem].iloc[0]
+                    
+                    esc1, esc2, esc3 = st.columns(3)
+                    with esc1: es_pior = st.text_input("Editar Pior Parada", value=str(row_s['pior_parada']))
+                    with esc2: es_status = st.selectbox("Editar Status", ["Pendente", "Em Andamento", "Resolvido"], index=["Pendente", "Em Andamento", "Resolvido"].index(row_s['status']), key='status_ed_sem')
+                    with esc3: es_maq = st.text_input("Editar Máquina", value=str(row_s['maquina'])).upper()
+                    
+                    st.write("**Editar os 5 Porquês:**")
+                    ep1 = st.text_input("1º Por que?", value=str(row_s['pq1']), key='ep1')
+                    ep2 = st.text_input("2º Por que?", value=str(row_s['pq2']), key='ep2')
+                    ep3 = st.text_input("3º Por que?", value=str(row_sel['pq3']) if 'row_sel' in locals() else str(row_s['pq3']), key='ep3')
+                    ep4 = st.text_input("4º Por que?", value=str(row_s['pq4']), key='ep4')
+                    ep5 = st.text_input("5º Por que?", value=str(row_s['pq5']), key='ep5')
+                    
+                    st.write("**Editar Plano:**")
+                    e_oque = st.text_area("O quê (Plano)", value=str(row_s['plano_acao']))
+                    e_quem = st.text_input("Quem (Responsável)", value=str(row_s['responsavel']))
+                    e_quando = st.text_input("Quando (Prazo)", value=str(row_s['prazo']))
+                    
+                    st.markdown("---")
+                    btn_col1, btn_col2 = st.columns(2)
+                    with btn_col1:
+                        if st.button("💾 SALVAR ATUALIZAÇÃO SEMANAL", use_container_width=True):
+                            conn = sqlite3.connect('reportes_turno.db')
+                            cursor = conn.cursor()
+                            cursor.execute("""
+                                UPDATE analises_semanais SET pior_parada=?, status=?, maquina=?, pq1=?, pq2=?, pq3=?, pq4=?, pq5=?, causa_raiz=?, plano_acao=?, responsavel=?, prazo=? WHERE id=?
+                            """, (es_pior, es_status, es_maq, ep1, ep2, ep3, ep4, ep5, ep5, e_oque, e_quem, e_quando, int(id_sel_sem)))
+                            conn.commit(); conn.close()
+                            st.session_state['mostrar_edicao_semanal'] = False
+                            st.success("🎉 Dados atualizados!")
+                            st.rerun()
+                    with btn_col2:
+                        if st.button("❌ DELETAR ANÁLISE SEMANAL", type="primary", use_container_width=True):
+                            conn = sqlite3.connect('reportes_turno.db')
+                            cursor = conn.cursor()
+                            cursor.execute("DELETE FROM analises_semanais WHERE id = ?", (int(id_sel_sem),))
+                            conn.commit(); conn.close()
+                            st.session_state['mostrar_edicao_semanal'] = False
+                            st.success("Deletado do sistema!")
+                            st.rerun()
+
+    # =========================================================
+    # NOVA ABA: APRESENTAÇÃO SEMANAL (CRUZAMENTO DOS DADOS COM O BANCO)
+    # =========================================================
+    elif menu == "📊 APRESENTAÇÃO SEMANAL":
+        st.markdown("<h2 style='text-align:center;'>📊 Reunião Geral de Fechamento & Apresentação Semanal</h2>", unsafe_allow_html=True)
+        
+        st.subheader("⚙️ Selecione os Parâmetros da Apresentação")
+        ap_c1, ap_c2, ap_c3 = st.columns(3)
+        with ap_c1:
+            maq_ap = st.selectbox("Máquina em Análise", sorted(df_order['Máquina'].unique()), key='maq_ap')
+        with ap_c2:
+            turno_ap = st.selectbox("Turno", ["T1", "T2", "T3"], key='turno_ap')
+            # Filtro simplificado de turnos mapeado
+            turno_lista = [turno_ap[-1]]
+        with ap_c3:
+            periodo_ap = st.date_input("Período Semana", [df_order['Data'].max() - timedelta(days=7), df_order['Data'].max()], key='per_ap')
+            
+        # Puxa informações operacionais brutas do arquivo Excel centralizado
+        df_ap_bruto = df_order[(df_order['Data'].dt.date >= periodo_ap[0]) & (df_order['Data'].dt.date <= periodo_ap[1]) & (df_order['Turno'].isin(turno_lista))]
+        df_ap_maq = df_ap_bruto[df_ap_bruto['Máquina'] == maq_ap]
+        df_ap_stops = df_stops[(df_stops['Data'].dt.date >= periodo_ap[0]) & (df_stops['Data'].dt.date <= periodo_ap[1]) & (df_stops['Máquina'] == maq_ap) & (df_stops['Turno'].isin(turno_lista))]
+        
+        st.markdown(f"""<div style="background-color:#f1f5f9; padding:15px; border-radius:10px; border-left:6px solid #10b981; margin-bottom:15px;">
+            <h3 style='margin:0; color:#0f172a;'>EXIBIÇÃO INTEGRADA — MÁQUINA {maq_ap} (TURNO {turno_ap})</h3>
+            <p style='margin:0; color:#64748b;'>Análise estatística cruzada com o banco de dados de ações de campo.</p></div>""", unsafe_allow_html=True)
+            
+        c_kpi1, c_kpi2, c_kpi3 = st.columns(3)
+        mov_sem = (df_ap_maq["Run Time"].sum() / df_ap_maq["Horário Padrão"].replace(0,1).sum() * 100)
+        loss_sem = ((df_ap_maq["Machine Counter"].sum() - df_ap_maq["Peças Estoque - Ajuste"].sum()) / df_ap_maq["Machine Counter"].replace(0,1).sum() * 100)
+        pecas_sem = df_ap_maq["Peças Estoque - Ajuste"].sum()
+        
+        with c_kpi1: st.plotly_chart(mini_gauge("Movimentação Semanal", mov_sem, "#10b981", 85, 140), use_container_width=True)
+        with c_kpi2: st.plotly_chart(mini_gauge("Loss Semanal", loss_sem, "#e74c3c", 5, 140), use_container_width=True)
+        with c_kpi3: st.markdown(f'<div class="metric-card" style="height:110px;"><div class="metric-title">Volume Realizado Semanal</div><div class="metric-value" style="font-size:1.8rem; margin-top:10px;">{fmt(pecas_sem)}</div></div>', unsafe_allow_html=True)
+        
+        # Conexão com o Banco SQLite buscando a análise inserida pelos operadores
+        conn = sqlite3.connect('reportes_turno.db')
+        # Filtra buscando correspondência exata de Máquina e Turno
+        df_query_db = pd.read_sql_query("""
+            SELECT * FROM analises_semanais 
+            WHERE maquina = ? AND turno = ? 
+            ORDER BY data_registro DESC LIMIT 1
+        """, conn, params=(maq_ap, turno_ap))
+        conn.close()
+        
+        col_la, col_lb = st.columns([2, 1])
+        with col_la:
+            st.markdown("🏆 **Ranking de Eficiência Semanal**")
+            rk_sem = df_ap_bruto.groupby('Máquina').agg({'Run Time':'sum','Horário Padrão':'sum'}).reset_index()
+            rk_sem['Mov %'] = (rk_sem['Run Time']/rk_sem['Horário Padrão'].replace(0,1)*100).round(1)
+            rk_sem = rk_sem.sort_values('Mov %', ascending=False).reset_index(drop=True)
+            rk_sem.index += 1
+            st.dataframe(rk_sem, use_container_width=True)
+            
+        with col_lb:
+            st.markdown("🛑 **Top Ofensores (Gráfico do Arquivo)**")
+            stop_data_ap = df_ap_stops.groupby('Problema')['Minutos'].sum().sort_values(ascending=True).tail(5)
+            if not stop_data_ap.empty:
+                st.plotly_chart(px.bar(stop_data_ap, orientation='h', color_discrete_sequence=['#10b981']).update_layout(height=230, paper_bgcolor='white', plot_bgcolor='white', margin=dict(l=0,r=0,t=0,b=0)), use_container_width=True)
             else:
-                st.caption("Insira um ID válido presente na tabela acima para gerenciar ou editar.")
+                st.write("Sem registros de falhas mecânicas no período.")
+
+        # SEÇÃO DA CAUSA RAIZ REPLICADA VIA BANCO DE DADOS
+        st.markdown("<div class='section-header'>Análise Causa Raiz Realizada pelos Operadores (Puxada do Banco de Dados)</div>", unsafe_allow_html=True)
+        
+        if df_query_db.empty:
+            st.warning(f"⚠️ Nenhuma análise técnica foi lançada no banco de dados para a Máquina {maq_ap} no turno {turno_ap}. Peça para o operador preencher na aba 'Lançar Análise Semanal'.")
+        else:
+            dados_db_pior = df_query_db.iloc[0]
+            st.markdown(f"""
+                <div class="five-why-box">
+                    <div style="font-size:1.1rem; font-weight:700; color:#059669; margin-bottom:10px;">
+                        DIAGRAMA DE CAUSA RAIZ PREENCHIDO — OFENSOR: <span style="color:#e11d48;">{dados_db_pior['pior_parada']}</span>
+                    </div>
+                    <div class="five-why-line"><b>1º Por que?</b> {dados_db_pior['pq1']}</div>
+                    <div class="five-why-line"><b>2º Por que?</b> {dados_db_pior['pq2']}</div>
+                    <div class="five-why-line"><b>3º Por que?</b> {dados_db_pior['pq3']}</div>
+                    <div class="five-why-line"><b>4º Por que?</b> {dados_db_pior['pq4']}</div>
+                    <div class="five-why-line"><b>5º Por que? (Causa Raiz)</b> <span style="color:#b91c1c; font-weight:600;">{dados_db_pior['pq5']}</span></div>
+                    <br>
+                    <div style="display:flex; gap:10px; margin-top:5px;">
+                        <div style="flex:1; border:1px solid #cbd5e1; background-color:#f8fafc; padding:12px; border-radius:5px;">
+                            <b>CAUSA RAIZ CONSOLIDADA:</b><br><span style="color:#334155;">{dados_db_pior['causa_raiz']}</span>
+                        </div>
+                        <div style="flex:2; border:1px solid #cbd5e1; background-color:#f8fafc; padding:12px; border-radius:5px;">
+                            <b>PLANO DE AÇÃO BLOQUEANTE / IMEDIATO:</b><br><span style="color:#334155;">{dados_db_pior['plano_acao']}</span><br>
+                            <small style='color:#64748b;'><b>Quem:</b> {dados_db_pior['responsavel']} | <b>Quando:</b> {dados_db_pior['prazo']} | <b>Status:</b> {dados_db_pior['status']}</small>
+                        </div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
 else:
     st.info("💡 Por favor, carregue os arquivos Excel para iniciar.")
