@@ -9,7 +9,7 @@ import sqlite3
 # 1. CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(layout="wide", page_title="Industrial Analytics Hub", page_icon="⚙️")
 
-# --- INICIALIZAÇÃO DE ESTADOS DO STREAMLIT (Controle de Visibilidade) ---
+# --- INICIALIZAÇÃO DE ESTADOS DO STREAMLIT (Controle de Visibilidade e Resets) ---
 if 'mostrar_edicao' not in st.session_state:
     st.session_state['mostrar_edicao'] = False
 if 'id_atual' not in st.session_state:
@@ -19,6 +19,10 @@ if 'mostrar_edicao_semanal' not in st.session_state:
     st.session_state['mostrar_edicao_semanal'] = False
 if 'id_atual_semanal' not in st.session_state:
     st.session_state['id_atual_semanal'] = 0
+
+# Contador para resetar os campos do Nippo Coordenadores após a gravação
+if 'contador_nippo' not in st.session_state:
+    st.session_state['contador_nippo'] = 0
 
 # =========================================================
 # BANCO DE DADOS LOCAL (SQLite)
@@ -59,7 +63,7 @@ def init_db():
             status TEXT
         )
     """)
-    # Tabela 3: Nova Tabela Nippo Coordenadores (Troca de Turno por Máquina)
+    # Tabela 3: Tabela Nippo Coordenadores (Troca de Turno por Máquina)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS nippo_coordenadores (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -259,7 +263,7 @@ def load_planner_metas_advanced(file, data_ref):
 # --- SIDEBAR ---
 with st.sidebar:
     st.markdown("<h1 style='font-size:1.4rem; color:#10b981; font-weight:900; margin-bottom:15px; text-align:center;'>🏭 ANALYTICS HUB</h1>", unsafe_allow_html=True)
-    uploaded_file = st.file_uploader("📂 Carregar Excel Produção (.xlsm)", type=["xlsm"])
+    uploaded_file = st.file_uploader("📂 Carregar Excel Production (.xlsm)", type=["xlsm"])
     up_datas = st.file_uploader("📂 Carregar Excel DATAS (.xlsx)", type=["xlsx"])
     st.markdown("---")
     if uploaded_file:
@@ -274,7 +278,7 @@ with st.sidebar:
             "📝 LANÇAR ANÁLISE SEMANAL", 
             "📋 ACOMP. ANÁLISES SEMANAIS", 
             "📊 APRESENTAÇÃO SEMANAL",
-            "📋 NIPPO COORDENADORES"      # Nova aba inserida no escopo do rádio
+            "📋 NIPPO COORDENADORES"
         ])
 
 if uploaded_file:
@@ -529,7 +533,7 @@ if uploaded_file:
                     conn = sqlite3.connect('reportes_turno.db')
                     cursor = conn.cursor()
                     cursor.execute("""
-                        INSERT INTO reportes (data_registro, turno, coordenador, ocorrencias, maq_analisada, problema,
+                        INSERT INTO reportes (data_registro, turno, coordenador, ocorrencias, maq_analisada, समस्या,
                         pq1, pq2, pq3, pq4, pq5, oque, quem, quando, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (str(data_rep), turno_rep, coord_rep, txt_ocorrencias, maq_an, prob_an, p1, p2, p3, p4, p5, action_oque, action_quem, action_quando, status_inicial))
                     conn.commit(); conn.close()
@@ -826,50 +830,53 @@ if uploaded_file:
             """, unsafe_allow_html=True)
 
     # =========================================================
-    # NOVA ABA EXCLUSIVA: 📋 NIPPO COORDENADORES (TROCA DE TURNO)
+    # ABA: 📋 NIPPO COORDENADORES (COM IMPLEMENTAÇÃO DE AUTO-RESET)
     # =========================================================
     elif menu == "📋 NIPPO COORDENADORES":
         st.markdown("## 📋 Nippo Coordenadores — Troca de Turno Operacional")
         
-        # Criação interna das duas sub-abas (Lançar e Consultar)
         aba_lancar, aba_consultar = st.tabs(["📝 Lançar Fechamento", "🔍 Histórico por Máquina"])
         
         with aba_lancar:
+            # FIX: Todos os campos abaixo recebem uma 'key' indexada pelo contador dinâmico. 
+            # Quando salvamos com sucesso, o contador sobe e o Streamlit reconstrói os campos vazios.
+            versao_chave = st.session_state['contador_nippo']
+            
             st.subheader("Informações Gerais do Turno")
             col_n1, col_n2 = st.columns(2)
             with col_n1:
-                data_nippo = st.date_input("Data do Nippo", date.today())
-                coordenador_nippo = st.text_input("Nome do Coordenador", placeholder="Ex: DANILO").upper()
+                data_nippo = st.date_input("Data do Nippo", date.today(), key=f"date_np_{versao_chave}")
+                coordenador_nippo = st.text_input("Nome do Coordenador", placeholder="Ex: DANILO", key=f"coord_np_{versao_chave}").upper()
             with col_n2:
-                turno_nippo = st.selectbox("Selecione o Turno do Nippo", ["1º Turno", "2º Turno", "3º Turno"], index=2)
-                tecnico_nippo = st.text_input("Nome do Técnico Responsável", placeholder="Ex: KANIGIA").upper()
+                turno_nippo = st.selectbox("Selecione o Turno do Nippo", ["1º Turno", "2º Turno", "3º Turno"], index=2, key=f"turno_np_{versao_chave}")
+                tecnico_nippo = st.text_input("Nome do Técnico Responsável", placeholder="Ex: KANIGIA", key=f"tec_np_{versao_chave}").upper()
             
             st.markdown("<div class='section-header'>Lançamento Individual por Máquina (M1 a M7)</div>", unsafe_allow_html=True)
             
             maquinas_lista = [f"M{i}" for i in range(1, 8)]
             mapa_inputs_maquinas = {}
             
-            # Geração dinâmica dos formulários colapsáveis de M1 a M7
             for m_item in maquinas_lista:
                 with st.expander(f"⚙️ Reporte de Campo — Máquina: {m_item}", expanded=True):
                     col_b1, col_b2, col_b3 = st.columns([2, 1, 1])
                     
                     with col_b1:
-                        txt_compartilhar = st.text_area(f"Itens a compartilhar / Ocorrências ({m_item})", key=f"txt_nippo_{m_item}", height=90)
+                        txt_compartilhar = st.text_area(f"Itens a compartilhar / Ocorrências ({m_item})", key=f"txt_nippo_{m_item}_{versao_chave}", height=90)
                     with col_b2:
-                        sku_maq = st.text_input(f"SKU Atual ({m_item})", key=f"sku_nippo_{m_item}").upper()
-                        prod_maq = st.number_input(f"Produtividade % ({m_item})", min_value=0.0, max_value=100.0, step=0.1, key=f"prod_nippo_{m_item}")
-                        loss_maq = st.number_input(f"Loss % ({m_item})", min_value=0.0, max_value=100.0, step=0.1, key=f"loss_nippo_{m_item}")
+                        sku_maq = st.text_input(f"SKU Atual ({m_item})", key=f"sku_nippo_{m_item}_{versao_chave}").upper()
+                        prod_maq = st.number_input(f"Produtividade % ({m_item})", min_value=0.0, max_value=100.0, step=0.1, key=f"prod_nippo_{m_item}_{versao_chave}")
+                        loss_maq = st.number_input(f"Loss % ({m_item})", min_value=0.0, max_value=100.0, step=0.1, key=f"loss_nippo_{m_item}_{versao_chave}")
                     with col_b3:
-                        pal_ini_maq = st.text_input(f"Palete Inicial ({m_item})", key=f"pal_ini_nippo_{m_item}").upper()
-                        pal_fim_maq = st.text_input(f"Palete Final ({m_item})", key=f"pal_fim_nippo_{m_item}").upper()
-                        tot_ordem_maq = st.number_input(f"Total da Ordem ({m_item})", min_value=0, step=1, key=f"tot_nippo_{m_item}")
+                        pal_ini_maq = st.text_input(f"Palete Inicial ({m_item})", key=f"pal_ini_nippo_{m_item}_{versao_chave}").upper()
+                        pal_fim_maq = st.text_input(f"Palete Final ({m_item})", key=f"pal_fim_nippo_{m_item}_{versao_chave}").upper()
+                        tot_ordem_maq = st.number_input(f"Total da Ordem ({m_item})", min_value=0, step=1, key=f"tot_nippo_{m_item}_{versao_chave}")
                         
                     mapa_inputs_maquinas[m_item] = {
                         "itens": txt_compartilhar, "sku": sku_maq, "prod": prod_maq,
                         "loss": loss_maq, "pal_ini": pal_ini_maq, "pal_fim": pal_fim_maq, "tot": tot_ordem_maq
                     }
             
+            # Executa o salvamento e realiza o auto-reset via incremento de estado
             if st.button("💾 GRAVAR REPORTE NIPPO NO BANCO", type="primary", use_container_width=True):
                 if not coordenador_nippo or not tecnico_nippo:
                     st.error("Não é possível salvar. Os campos Coordenador e Técnico são obrigatórios.")
@@ -877,7 +884,6 @@ if uploaded_file:
                     conn = sqlite3.connect('reportes_turno.db')
                     cursor = conn.cursor()
                     try:
-                        # Varre o dicionário e salva as 7 linhas (uma para cada máquina)
                         for m_item, dados in mapa_inputs_maquinas.items():
                             cursor.execute("""
                                 INSERT INTO nippo_coordenadores 
@@ -888,7 +894,12 @@ if uploaded_file:
                                 dados["itens"], dados["prod"], dados["loss"], dados["sku"], dados["pal_ini"], dados["pal_fim"], int(dados["tot"])
                             ))
                         conn.commit()
-                        st.success(f"🎉 O Nippo completo do {turno_nippo} foi alocado com sucesso no banco de dados!")
+                        
+                        # MODIFICAÇÃO DE RESETS: Incrementa o contador para forçar o reset dos campos textuais
+                        st.session_state['contador_nippo'] += 1
+                        st.success(f"🎉 O Nippo completo do {turno_nippo} foi gravado e as caixas de texto foram limpas para o próximo uso!")
+                        st.rerun()
+                        
                     except Exception as error:
                         st.error(f"Falha operacional na gravação das linhas: {error}")
                     finally:
@@ -921,15 +932,11 @@ if uploaded_file:
             if df_nippo_res.empty:
                 st.warning(f"Nenhum diário Nippo encontrado para o dia {query_data.strftime('%d/%m/%Y')}.")
             else:
-                # Exibição organizada dos dados estruturados
                 st.dataframe(df_nippo_res, use_container_width=True)
-                
-                st.markdown("<div class='section-header'>📝 Detalhamento de Itens Compartilhados no Turno</div>", unsafe_allow_html=True)
+                st.markdown("<div class='section-header'>¼ Detalhamento de Itens Compartilhados no Turno</div>", unsafe_allow_html=True)
                 for _, linha in df_nippo_res.iterrows():
-                    # Só renderiza caixas se houver registro de texto para a máquina
                     if str(linha['itens_compartilhar']).strip():
                         st.markdown(f"🔹 **{linha['maquina']} — SKU: {linha['sku']}** (Turno: {linha['turno']} | Coordenador: {linha['coordenador']} | Técnico: {linha['tecnico']})")
                         st.info(linha['itens_compartilhar'])
-
 else:
     st.info("💡 Por favor, carregue os arquivos Excel para iniciar o Analytics Hub.")
