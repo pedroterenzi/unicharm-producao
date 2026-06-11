@@ -20,9 +20,13 @@ if 'mostrar_edicao_semanal' not in st.session_state:
 if 'id_atual_semanal' not in st.session_state:
     st.session_state['id_atual_semanal'] = 0
 
-# Contador para resetar os campos do Nippo Coordenadores após a gravação
 if 'contador_nippo' not in st.session_state:
     st.session_state['contador_nippo'] = 0
+
+if 'mostrar_edicao_nippo' not in st.session_state:
+    st.session_state['mostrar_edicao_nippo'] = False
+if 'chave_nippo_edicao' not in st.session_state:
+    st.session_state['chave_nippo_edicao'] = ""
 
 # =========================================================
 # BANCO DE DADOS LOCAL (SQLite)
@@ -263,7 +267,7 @@ def load_planner_metas_advanced(file, data_ref):
 # --- SIDEBAR ---
 with st.sidebar:
     st.markdown("<h1 style='font-size:1.4rem; color:#10b981; font-weight:900; margin-bottom:15px; text-align:center;'>🏭 ANALYTICS HUB</h1>", unsafe_allow_html=True)
-    uploaded_file = st.file_uploader("📂 Carregar Excel Production (.xlsm)", type=["xlsm"])
+    uploaded_file = st.file_uploader("📂 Carregar Excel Produção (.xlsm)", type=["xlsm"])
     up_datas = st.file_uploader("📂 Carregar Excel DATAS (.xlsx)", type=["xlsx"])
     st.markdown("---")
     if uploaded_file:
@@ -533,7 +537,7 @@ if uploaded_file:
                     conn = sqlite3.connect('reportes_turno.db')
                     cursor = conn.cursor()
                     cursor.execute("""
-                        INSERT INTO reportes (data_registro, turno, coordenador, ocorrencias, maq_analisada, समस्या,
+                        INSERT INTO reportes (data_registro, turno, coordenador, ocorrencias, maq_analisada, problema,
                         pq1, pq2, pq3, pq4, pq5, oque, quem, quando, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (str(data_rep), turno_rep, coord_rep, txt_ocorrencias, maq_an, prob_an, p1, p2, p3, p4, p5, action_oque, action_quem, action_quando, status_inicial))
                     conn.commit(); conn.close()
@@ -734,7 +738,7 @@ if uploaded_file:
                             """, (es_pior, es_status, es_maq, ep1, ep2, ep3, ep4, ep5, ep5, e_oque, e_quem, e_quando, int(id_sel_sem)))
                             conn.commit(); conn.close()
                             st.session_state['mostrar_edicao_semanal'] = False
-                            st.success("🎉 Dados atualizados!")
+                            st.success("🎉 Dados updated!")
                             st.rerun()
                     with btn_col2:
                         if st.button("❌ DELETAR ANÁLISE SEMANAL", type="primary", use_container_width=True):
@@ -830,16 +834,14 @@ if uploaded_file:
             """, unsafe_allow_html=True)
 
     # =========================================================
-    # ABA: 📋 NIPPO COORDENADORES (COM IMPLEMENTAÇÃO DE AUTO-RESET)
+    # ABA: 📋 NIPPO COORDENADORES (COM SISTEMA DE EDIÇÃO E EXCLUSÃO)
     # =========================================================
     elif menu == "📋 NIPPO COORDENADORES":
         st.markdown("## 📋 Nippo Coordenadores — Troca de Turno Operacional")
         
-        aba_lancar, aba_consultar = st.tabs(["📝 Lançar Fechamento", "🔍 Histórico por Máquina"])
+        aba_lancar, aba_consultar = st.tabs(["📝 Lançar Fechamento", "🔍 Histórico / Gerenciamento"])
         
         with aba_lancar:
-            # FIX: Todos os campos abaixo recebem uma 'key' indexada pelo contador dinâmico. 
-            # Quando salvamos com sucesso, o contador sobe e o Streamlit reconstrói os campos vazios.
             versao_chave = st.session_state['contador_nippo']
             
             st.subheader("Informações Gerais do Turno")
@@ -876,7 +878,6 @@ if uploaded_file:
                         "loss": loss_maq, "pal_ini": pal_ini_maq, "pal_fim": pal_fim_maq, "tot": tot_ordem_maq
                     }
             
-            # Executa o salvamento e realiza o auto-reset via incremento de estado
             if st.button("💾 GRAVAR REPORTE NIPPO NO BANCO", type="primary", use_container_width=True):
                 if not coordenador_nippo or not tecnico_nippo:
                     st.error("Não é possível salvar. Os campos Coordenador e Técnico são obrigatórios.")
@@ -889,34 +890,26 @@ if uploaded_file:
                                 INSERT INTO nippo_coordenadores 
                                 (data, turno, coordenador, tecnico, maquina, itens_compartilhar, produtividade, loss, sku, palete_inicial, palete_final, total_ordem)
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """, (
-                                str(data_nippo), turno_nippo, coordenador_nippo, tecnico_nippo, m_item,
-                                dados["itens"], dados["prod"], dados["loss"], dados["sku"], dados["pal_ini"], dados["pal_fim"], int(dados["tot"])
-                            ))
+                            """, (str(data_nippo), turno_nippo, coordenador_nippo, tecnico_nippo, m_item,
+                                dados["itens"], dados["prod"], dados["loss"], dados["sku"], dados["pal_ini"], dados["pal_fim"], int(dados["tot"])))
                         conn.commit()
-                        
-                        # MODIFICAÇÃO DE RESETS: Incrementa o contador para forçar o reset dos campos textuais
                         st.session_state['contador_nippo'] += 1
-                        st.success(f"🎉 O Nippo completo do {turno_nippo} foi gravado e as caixas de texto foram limpas para o próximo uso!")
+                        st.success("🎉 O Nippo completo foi gravado e as caixas de texto foram limpas!")
                         st.rerun()
-                        
                     except Exception as error:
-                        st.error(f"Falha operacional na gravação das linhas: {error}")
+                        st.error(f"Falha operacional na gravação: {error}")
                     finally:
                         conn.close()
                         
         with aba_consultar:
             st.subheader("🔍 Filtros de Pesquisa Histórica")
             c_f1, c_f2, c_f3 = st.columns(3)
-            with c_f1:
-                query_data = st.date_input("Filtrar Data Específica", date.today(), key="q_data")
-            with c_f2:
-                query_turno = st.selectbox("Filtrar Turno Específico", ["Todos", "1º Turno", "2º Turno", "3º Turno"], index=0)
-            with c_f3:
-                query_maq = st.selectbox("Filtrar Máquina Foco", ["Todas", "M1", "M2", "M3", "M4", "M5", "M6", "M7"], index=0)
+            with c_f1: query_data = st.date_input("Filtrar Data", date.today(), key="q_data")
+            with c_f2: query_turno = st.selectbox("Filtrar Turno", ["Todos", "1º Turno", "2º Turno", "3º Turno"], index=0)
+            with c_f3: query_maq = st.selectbox("Filtrar Máquina", ["Todas", "M1", "M2", "M3", "M4", "M5", "M6", "M7"], index=0)
                 
             conn = sqlite3.connect('reportes_turno.db')
-            sql_txt = "SELECT data, turno, coordenador, tecnico, maquina, itens_compartilhar, sku, produtividade, loss, palete_inicial, palete_final, total_ordem FROM nippo_coordenadores WHERE data = ?"
+            sql_txt = "SELECT id, data, turno, coordenador, tecnico, maquina, itens_compartilhar, sku, produtividade, loss, palete_inicial, palete_final, total_ordem FROM nippo_coordenadores WHERE data = ?"
             parametros_filtro = [str(query_data)]
             
             if query_turno != "Todos":
@@ -938,5 +931,121 @@ if uploaded_file:
                     if str(linha['itens_compartilhar']).strip():
                         st.markdown(f"🔹 **{linha['maquina']} — SKU: {linha['sku']}** (Turno: {linha['turno']} | Coordenador: {linha['coordenador']} | Técnico: {linha['tecnico']})")
                         st.info(linha['itens_compartilhar'])
+
+            # =========================================================
+            # NOVOS RECURSOS DE GERENCIAMENTO (EDITAR / EXCULIR REPORTE NIPPO)
+            # =========================================================
+            st.markdown("<div class='section-header'>✏️ Central de Gerenciamento e Modificações do Nippo</div>", unsafe_allow_html=True)
+            
+            col_ed1, col_ed2 = st.columns(2)
+            with col_ed1: target_data_ed = st.date_input("Selecione a Data para Editar/Excluir", date.today(), key="tg_dt_ed")
+            with col_ed2: target_turno_ed = st.selectbox("Selecione o Turno para Editar/Excluir", ["1º Turno", "2º Turno", "3º Turno"], index=2, key="tg_tr_ed")
+            
+            chave_composta = f"{target_data_ed}_{target_turno_ed}"
+            if chave_composta != st.session_state['chave_nippo_edicao']:
+                st.session_state['chave_nippo_edicao'] = chave_composta
+                st.session_state['mostrar_edicao_nippo'] = False
+
+            conn = sqlite3.connect('reportes_turno.db')
+            df_atual_nippo = pd.read_sql_query("SELECT * FROM nippo_coordenadores WHERE data = ? AND turno = ?", conn, params=(str(target_data_ed), target_turno_ed))
+            conn.close()
+
+            if df_atual_nippo.empty:
+                st.caption("Nenhum registro encontrado para a data e turno selecionados na área de modificação.")
+            else:
+                if not st.session_state['mostrar_edicao_nippo']:
+                    if st.button("🔍 ABRIR FORMULÁRIO DE EDIÇÃO DO NIPPO", use_container_width=True):
+                        st.session_state['mostrar_edicao_nippo'] = True
+                        st.rerun()
+                else:
+                    if st.button("🔼 MINIMIZAR / FECHAR PAINEL DE EDIÇÃO DO NIPPO", use_container_width=True):
+                        st.session_state['mostrar_edicao_nippo'] = False
+                        st.rerun()
+
+                if st.session_state['mostrar_edicao_nippo']:
+                    st.markdown(f"#### Editando Dados de Linha do Turno: `{target_turno_ed}` do Dia `{target_data_ed.strftime('%d/%m/%Y')}`")
+                    
+                    # Carrega os dados gerais baseado na primeira linha retornada do banco
+                    coord_atual_val = df_atual_nippo.iloc[0]['coordenador']
+                    tec_atual_val = df_atual_nippo.iloc[0]['tecnico']
+                    
+                    ec_n1, ec_n2 = st.columns(2)
+                    with ec_n1: edit_nippo_coord = st.text_input("Corrigir Coordenador Geral", value=str(coord_atual_val)).upper()
+                    with ec_n2: edit_nippo_tec = st.text_input("Corrigir Técnico Geral", value=str(tec_atual_val)).upper()
+                    
+                    maqs_banco = [f"M{i}" for i in range(1, 8)]
+                    mapa_edicao_final = {}
+                    
+                    for m_b in maqs_banco:
+                        row_maq_b = df_atual_nippo[df_atual_nippo['maquina'] == m_b]
+                        
+                        # Verifica se a máquina possui dados gravados, se não cria vazia
+                        if not row_maq_b.empty:
+                            r_m = row_maq_b.iloc[0]
+                            id_registro_banco = int(r_m['id'])
+                            val_itens = str(r_m['itens_compartilhar'])
+                            val_sku = str(r_m['sku'])
+                            val_prod = float(r_m['produtividade'])
+                            val_loss = float(r_m['loss'])
+                            val_pini = str(r_m['palete_inicial'])
+                            val_pfim = str(r_m['palete_final'])
+                            val_tot = int(r_m['total_ordem'])
+                        else:
+                            id_registro_banco = None
+                            val_itens, val_sku, val_prod, val_loss, val_pini, val_pfim, val_tot = "", "", 0.0, 0.0, "", "", 0
+                            
+                        with st.expander(f"⚙️ Alterar Informações — {m_b}", expanded=False):
+                            ce1, ce2, ce3 = st.columns([2, 1, 1])
+                            with ce1: tx_it = st.text_area(f"Ocorrências ({m_b})", value=val_itens, key=f"e_tx_{m_b}", height=90)
+                            with ce2:
+                                sk_it = st.text_input(f"SKU ({m_b})", value=val_sku, key=f"e_sk_{m_b}").upper()
+                                pr_it = st.number_input(f"Produtividade % ({m_b})", min_value=0.0, max_value=100.0, value=val_prod, step=0.1, key=f"e_pr_{m_b}")
+                                ls_it = st.number_input(f"Loss % ({m_b})", min_value=0.0, max_value=100.0, value=val_loss, step=0.1, key=f"e_ls_{m_b}")
+                            with ce3:
+                                pi_it = st.text_input(f"Palete Inicial ({m_b})", value=val_pini, key=f"e_pi_{m_b}").upper()
+                                pf_it = st.text_input(f"Palete Final ({m_b})", value=val_pfim, key=f"e_pf_{m_b}").upper()
+                                tt_it = st.number_input(f"Total Ordem ({m_b})", min_value=0, value=val_tot, step=1, key=f"e_tt_{m_b}")
+                                
+                        mapa_edicao_final[m_b] = {
+                            "id": id_registro_banco, "itens": tx_it, "sku": sk_it, "prod": pr_it,
+                            "loss": ls_it, "pal_ini": pi_it, "pal_fim": pf_it, "tot": tt_it
+                        }
+                        
+                    st.markdown("---")
+                    col_nippo_act1, col_nippo_act2 = st.columns(2)
+                    
+                    # 1. Salvar Alterações
+                    with col_nippo_act1:
+                        if st.button("💾 SALVAR ALTERAÇÕES DO NIPPO", use_container_width=True):
+                            conn = sqlite3.connect('reportes_turno.db')
+                            cursor = conn.cursor()
+                            for m_key, e_dados in mapa_edicao_final.items():
+                                if e_dados["id"] is not None:
+                                    cursor.execute("""
+                                        UPDATE nippo_coordenadores 
+                                        SET coordenador=?, tecnico=?, itens_compartilhar=?, sku=?, produtividade=?, loss=?, palete_inicial=?, palete_final=?, total_ordem=?
+                                        WHERE id=?
+                                    """, (edit_nippo_coord, edit_nippo_tec, e_dados["itens"], e_dados["sku"], e_dados["prod"], e_dados["loss"], e_dados["pal_ini"], e_dados["pal_fim"], int(e_dados["tot"]), e_dados["id"]))
+                                else:
+                                    # Se a máquina não existia originalmente no banco por erro, insere agora
+                                    cursor.execute("""
+                                        INSERT INTO nippo_coordenadores (data, turno, coordenador, tecnico, maquina, itens_compartilhar, produtividade, loss, sku, palete_inicial, palete_final, total_ordem)
+                                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    """, (str(target_data_ed), target_turno_ed, edit_nippo_coord, edit_nippo_tec, m_key, e_dados["itens"], e_dados["prod"], e_dados["loss"], e_dados["sku"], e_dados["pal_ini"], e_dados["pal_fim"], int(e_dados["tot"])))
+                            conn.commit(); conn.close()
+                            st.session_state['mostrar_edicao_nippo'] = False
+                            st.success("🎉 Todas as modificações de turno por máquina foram salvas com sucesso!")
+                            st.rerun()
+                            
+                    # 2. Excluir Turno Completo
+                    with col_nippo_act2:
+                        if st.button("❌ EXCLUIR TURNO COMPLETO DEFINITIVAMENTE", type="primary", use_container_width=True):
+                            conn = sqlite3.connect('reportes_turno.db')
+                            cursor = conn.cursor()
+                            cursor.execute("DELETE FROM nippo_coordenadores WHERE data = ? AND turno = ?", (str(target_data_ed), target_turno_ed))
+                            conn.commit(); conn.close()
+                            st.session_state['mostrar_edicao_nippo'] = False
+                            st.success(f"O fechamento completo do turno {target_turno_ed} na data especificada foi deletado!")
+                            st.rerun()
 else:
     st.info("💡 Por favor, carregue os arquivos Excel para iniciar o Analytics Hub.")
