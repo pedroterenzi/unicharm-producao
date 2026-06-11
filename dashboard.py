@@ -462,7 +462,7 @@ if uploaded_file:
                     st.success("🎉 Reporte alocado e registrado com sucesso no banco de dados local!")
 
     # =========================================================
-    # ABA: ACOMPANHAMENTO (EDICAO DINÂMICA COMPLETA + EXCLUSÃO)
+    # ABA: ACOMPANHAMENTO (FIXED NAMEERROR TYPO)
     # =========================================================
     elif menu == "📊 ACOMPANHAMENTO":
         st.markdown("## 📊 Painel de Acompanhamento de Ações")
@@ -494,24 +494,21 @@ if uploaded_file:
             id_selecionado = st.number_input("Digite o ID do reporte para carregar o painel de edição:", min_value=1, step=1)
             
             if id_selecionado in df_db['id'].values:
-                # Recupera os dados da linha selecionada do banco
                 row_sel = df_db[df_db['id'] == id_selecionado].iloc[0]
-                
                 st.markdown(f"#### Editando Dados do ID: `{id_selecionado}`")
                 
-                # Formula o painel de inputs preenchidos com os dados atuais para edição
+                # FIX COMPLETO: Variáveis corrigidas de e_col1/2/3 para e_c1/2/3 mapeando as colunas reais do st.columns
                 e_c1, e_c2, e_c3 = st.columns(3)
-                with e_col1:
+                with e_c1:
                     edit_coord = st.text_input("Editar Coordenador", value=str(row_sel['coordenador'])).upper()
-                with e_col2:
+                with e_c2:
                     edit_status = st.selectbox("Alterar Status", ["Pendente", "Em Andamento", "Resolvido"], index=["Pendente", "Em Andamento", "Resolvido"].index(row_sel['status']))
-                with e_col3:
+                with e_c3:
                     edit_maq = st.text_input("Editar Máquina Analisada", value=str(row_sel['maq_analisada'])).upper()
                 
                 edit_ocorrencias = st.text_area("Editar Ocorrências / Paradas do Turno", value=str(row_sel['ocorrencias']), height=100)
                 edit_problema = st.text_input("Editar Problema Foco", value=str(row_sel['problema']))
                 
-                # Edição dos 5 porquês
                 st.write("**Editar Análise dos 5 Porquês:**")
                 epq1 = st.text_input("Por que 1?", value=str(row_sel['pq1']))
                 epq2 = st.text_input("Por que 2?", value=str(row_sel['pq2']))
@@ -519,7 +516,6 @@ if uploaded_file:
                 epq4 = st.text_input("Por que 4?", value=str(row_sel['pq4']))
                 epq5 = st.text_input("Por que 5? (Causa Raiz)", value=str(row_sel['pq5']))
                 
-                # Edição das ações
                 st.write("**Editar Plano de Ação:**")
                 ea_oque = st.text_area("O quê (Ação)", value=str(row_sel['oque']))
                 ea_quem = st.text_input("Quem (Responsável)", value=str(row_sel['quem']))
@@ -528,7 +524,6 @@ if uploaded_file:
                 st.markdown("---")
                 col_actions1, col_actions2 = st.columns(2)
                 
-                # Ação 1: Salvar alterações de todos os campos editados
                 with col_actions1:
                     if st.button("💾 SALVAR ALTERAÇÕES", use_container_width=True):
                         conn = sqlite3.connect('reportes_turno.db')
@@ -547,7 +542,6 @@ if uploaded_file:
                         st.success(f"🎉 Todas as informações do ID {id_selecionado} foram atualizadas com sucesso!")
                         st.rerun()
                 
-                # Ação 2: Exclusão definitiva do registro
                 with col_actions2:
                     if st.button("❌ EXCLUIR REPORTE DEFINITIVAMENTE", type="primary", use_container_width=True):
                         conn = sqlite3.connect('reportes_turno.db')
