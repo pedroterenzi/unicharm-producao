@@ -9,7 +9,7 @@ import sqlite3
 # 1. CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(layout="wide", page_title="Industrial Analytics Hub", page_icon="⚙️")
 
-# --- INICIALIZAÇÃO DE ESTADOS DO STREAMLIT (Para Controle de Visibilidade) ---
+# --- INICIALIZAÇÃO DE ESTADOS DO STREAMLIT (Controle de Visibilidade) ---
 if 'mostrar_edicao' not in st.session_state:
     st.session_state['mostrar_edicao'] = False
 if 'id_atual' not in st.session_state:
@@ -52,45 +52,68 @@ def fmt(valor):
     except:
         return str(valor)
 
-# --- ESTILIZAÇÃO CSS PREMIUM (LIGHT MODE - FUNDO BRANCO) ---
+# --- ESTILIZAÇÃO CSS PREMIUM (LIGHT MODE - PADRONIZAÇÃO ESTÉTICA DO MENU) ---
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;900&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap');
     * { font-family: 'Inter', sans-serif; }
     
     /* Fundo Branco */
     .stApp { background-color: #ffffff; color: #1e293b; }
     
-    /* Menu Lateral Premium Light */
+    /* --- MENU LATERAL ULTRA MODERNO E PADRONIZADO --- */
     [data-testid="stSidebar"] { background-color: #f8fafc; border-right: 1px solid #e2e8f0; }
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label {
-        background-color: #ffffff; 
-        border: 1px solid #e2e8f0;
-        padding: 12px 18px !important; 
-        border-radius: 12px !important;
-        margin-bottom: 8px !important; 
-        color: #334155 !important; 
-        cursor: pointer;
-        font-weight: 600;
-        font-size: 0.9rem;
-        transition: all 0.25s ease-in-out;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-        display: block !important;
-        text-align: center;
+    
+    /* Forçar o container do radio button a ocupar 100% da largura interna */
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        width: 100%;
     }
-    /* Efeito de Hover no menu */
+    
+    /* Estilização perfeita dos botões: Todos RIGOROSAMENTE do mesmo tamanho */
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label {
+        background-color: #ffffff !important; 
+        border: 1px solid #e2e8f0 !important;
+        padding: 14px 20px !important; 
+        border-radius: 10px !important;
+        margin-bottom: 6px !important; 
+        color: #475569 !important; 
+        cursor: pointer;
+        font-weight: 500;
+        font-size: 0.85rem;
+        transition: all 0.2s ease-in-out;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02) !important;
+        
+        /* Garantia de padronização de tamanho */
+        display: flex !important;
+        align-items: center;
+        justify-content: flex-start;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    
+    /* Efeito de Hover Moderno (Ao passar o mouse) */
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label:hover {
         background-color: #f1f5f9 !important;
         border-color: #cbd5e1 !important;
-        transform: translateY(-1px);
-        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+        color: #0f172a !important;
+        transform: translateX(2px);
     }
-    /* Botão Ativo Premium */
+    
+    /* Botão Ativo Premium com Degradê de Alta Definição */
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label[data-checked="true"] {
         background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; 
-        color: white !important; 
+        color: #ffffff !important; 
         border: 1px solid #047857 !important;
-        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25) !important;
+        font-weight: 600;
+        box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2) !important;
+    }
+    
+    /* Esconde a bolinha original do radio button nativo do Streamlit */
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label icon {
+        display: none !important;
     }
 
     /* Cards de Métricas Light */
@@ -201,7 +224,7 @@ def load_planner_metas_advanced(file, data_ref):
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.markdown("<h1 style='color:#10b981;'>🏭 ANALYTICS HUB</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='font-size:1.6rem; color:#10b981; font-weight:900; margin-bottom:15px; text-align:center;'>🏭 ANALYTICS HUB</h1>", unsafe_allow_html=True)
     uploaded_file = st.file_uploader("📂 Carregar Excel Produção (.xlsm)", type=["xlsm"])
     up_datas = st.file_uploader("📂 Carregar Excel DATAS (.xlsx)", type=["xlsx"])
     st.markdown("---")
@@ -468,7 +491,7 @@ if uploaded_file:
                     st.success("🎉 Reporte alocado e registrado com sucesso no banco de dados local!")
 
     # =========================================================
-    # ABA: ACOMPANHAMENTO (COM CONTROLE DE MINIMIZAR INTELIGENTE)
+    # ABA: ACOMPANHAMENTO
     # =========================================================
     elif menu == "📊 ACOMPANHAMENTO":
         st.markdown("## 📊 Painel de Acompanhamento de Ações")
@@ -500,12 +523,10 @@ if uploaded_file:
             id_selecionado = st.number_input("Digite o ID do reporte para gerenciar:", min_value=1, step=1)
             
             if id_selecionado in df_db['id'].values:
-                # Se o usuário alterar o número do ID digitado, redefinimos o painel para fechado por segurança
                 if id_selecionado != st.session_state['id_atual']:
                     st.session_state['id_atual'] = id_selecionado
                     st.session_state['mostrar_edicao'] = False
                 
-                # --- BOTÃO DE MINIMIZAR / EXPANDIR O FORMULÁRIO ---
                 if not st.session_state['mostrar_edicao']:
                     if st.button("🔍 ABRIR PAINEL DE GERENCIAMENTO / EDICAO"):
                         st.session_state['mostrar_edicao'] = True
@@ -515,7 +536,6 @@ if uploaded_file:
                         st.session_state['mostrar_edicao'] = False
                         st.rerun()
                 
-                # Renderiza o formulário somente se o estado 'mostrar_edicao' for True
                 if st.session_state['mostrar_edicao']:
                     row_sel = df_db[df_db['id'] == id_selecionado].iloc[0]
                     st.markdown(f"#### Editando Dados do ID: `{id_selecionado}`")
@@ -555,16 +575,12 @@ if uploaded_file:
                                 SET coordenador = ?, status = ?, maq_analisada = ?, ocorrencias = ?, problema = ?, 
                                     pq1 = ?, pq2 = ?, pq3 = ?, pq4 = ?, pq5 = ?, oque = ?, quem = ?, quando = ?
                                 WHERE id = ?
-                            """, (
-                                edit_coord, edit_status, edit_maq, edit_ocorrencias, edit_problema,
-                                epq1, epq2, epq3, epq4, epq5, ea_oque, ea_quem, ea_quando, int(id_selecionado)
-                            ))
+                            """, (edit_coord, edit_status, edit_maq, edit_ocorrencias, edit_problema, epq1, epq2, epq3, epq4, epq5, ea_oque, ea_quem, ea_quando, int(id_selecionado)))
                             conn.commit()
                             conn.close()
                             
-                            # Auto-minimiza após salvar
                             st.session_state['mostrar_edicao'] = False
-                            st.success(f"🎉 Todas as informações do ID {id_selecionado} foram atualizadas com sucesso!")
+                            st.success(f"🎉 Todas as informações do ID {id_selecionado} foram updated com sucesso!")
                             st.rerun()
                     
                     with col_actions2:
@@ -575,7 +591,6 @@ if uploaded_file:
                             conn.commit()
                             conn.close()
                             
-                            # Auto-minimiza após excluir
                             st.session_state['mostrar_edicao'] = False
                             st.success(f"O reporte de ID {id_selecionado} foi excluído com sucesso do banco de dados!")
                             st.rerun()
