@@ -247,8 +247,11 @@ if uploaded_file:
             st.markdown(f"<div class='section-header'>DETALHAMENTO POR MÁQUINA - {dia.strftime('%d/%m/%Y')}</div>", unsafe_allow_html=True)
             df_dia = df_order[df_order['Data'].dt.date == dia]
             res = df_dia.groupby(['Categoria', 'Máquina']).agg({'Run Time':'sum','Horário Padrão':'sum','Machine Counter':'sum','Peças Estoque - Ajuste':'sum'}).reset_index()
-            res['Movimentação %'] = (res['Run Time'] / res['Horário Padrão'].replace(0,1) * 100).round(1)
-            res['Perda %'] = ((res['Machine Counter'] - res['Peças Estoque - Ajuste']) / res['Machine Counter'].replace(0,1) * 100).round(1)
+            
+            # ALTERAÇÃO: Formatação com 2 casas decimais, vírgula e símbolo de %
+            res['Movimentação %'] = (res['Run Time'] / res['Horário Padrão'].replace(0,1) * 100).apply(lambda x: f"{x:.2f}%".replace('.', ','))
+            res['Perda %'] = ((res['Machine Counter'] - res['Peças Estoque - Ajuste']) / res['Machine Counter'].replace(0,1) * 100).apply(lambda x: f"{x:.2f}%".replace('.', ','))
+            
             res['Peças Estoque'] = res['Peças Estoque - Ajuste'].apply(fmt)
             st.table(res[['Categoria','Máquina','Movimentação %','Perda %','Peças Estoque']])
 
@@ -281,7 +284,7 @@ if uploaded_file:
         with col2: st.plotly_chart(mini_gauge("Loss (%)", ((df_f['Machine Counter'].sum()-df_f['Peças Estoque - Ajuste'].sum())/df_f['Machine Counter'].sum()*100 if df_f['Machine Counter'].sum()>0 else 0), "#e74c3c", 2.5, 280), use_container_width=True)
 
     # =========================================================
-    # ABA: TOP 10 PARADAS (ATUALIZADA COM MÁQUINA/TURNO NO TÍTULO)
+    # ABA: TOP 10 PARADAS
     # =========================================================
     elif menu == "🛑 TOP 10 PARADAS":
         st.sidebar.subheader("Filtros Paradas")
@@ -296,7 +299,6 @@ if uploaded_file:
             (df_stops['Turno'].isin(f_turno_s))
         ]
         
-        # Ajuste: Exibição das Máquinas e Turnos de forma amigável e limpa no cabeçalho
         str_maquinas_s = ", ".join(f_maq_s) if f_maq_s else "Nenhuma"
         str_turnos_s = ", ".join(f_turno_s) if f_turno_s else "Nenhum"
         
@@ -368,7 +370,7 @@ if uploaded_file:
             posicao = check_maq.index[0]
             total_maqs = len(rank_df)
             if posicao <= 2:
-                msg, col = ("🏆 Excelente performance.", "#dcfce7")
+                msg, col = ("🏆 Liderança semanal! Excelente performance.", "#dcfce7")
             else:
                 msg, col = ("🚀 Foco na melhoria para subir o ranking semanal!", "#fee2e2")
             st.markdown(f'<div class="feedback-box" style="background:{col}; color:black; border-left:5px solid #10b981;">{msg}</div>', unsafe_allow_html=True)
