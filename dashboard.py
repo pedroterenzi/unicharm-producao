@@ -370,7 +370,7 @@ if uploaded_file:
             posicao = check_maq.index[0]
             total_maqs = len(rank_df)
             if posicao <= 2:
-                msg, col = ("🏆 Liderança semanal! Excelente performance.", "#dcfce7")
+                msg, col = ("🏆 Excelente performance.", "#dcfce7")
             else:
                 msg, col = ("🚀 Foco na melhoria para subir o ranking semanal!", "#fee2e2")
             st.markdown(f'<div class="feedback-box" style="background:{col}; color:black; border-left:5px solid #10b981;">{msg}</div>', unsafe_allow_html=True)
