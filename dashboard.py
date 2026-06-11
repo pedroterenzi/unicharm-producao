@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, date
 from sqlalchemy import create_engine, text
 import io
 import hashlib
+import re  # Biblioteca nativa para validação de padrões de texto (regex)
 
 # 1. CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(layout="wide", page_title="Industrial Analytics Hub", page_icon="⚙️")
@@ -23,6 +24,19 @@ def obter_engine():
 # Função auxiliar para criptografar senhas (Segurança Industrial)
 def hash_senha(senha):
     return hashlib.sha256(str.encode(senha)).hexdigest()
+
+# Função para validar a força da senha de forma robusta
+def validar_forca_senha(senha):
+    erros = []
+    if len(senha) < 8:
+        erros.append("Mínimo de 8 caracteres")
+    if not re.search(r"[A-Z]", senha):
+        erros.append("Pelo menos 1 letra MAIÚSCULA")
+    if not re.search(r"[0-9]", senha):
+        erros.append("Pelo menos 1 número")
+    if not re.search(r"[@#\$%\^&\*!\+=\-\[\]\{\}\(\)\|\:\;\,\.\?\/\~\`\_\\]", senha):
+        erros.append("Pelo menos 1 caractere especial (@, #, $, %, etc.)")
+    return erros
 
 def init_db():
     engine = obter_engine()
@@ -257,66 +271,80 @@ def load_planner_metas_advanced(file, data_ref):
         return {}, {}, 0, 0
 
 # =========================================================
-# TELA DE AUTENTICAÇÃO E CADASTRO
+# SEPARAÇÃO DE TELAS: SISTEMA DE LOGIN E CADASTRO VIA ABAS
 # =========================================================
 if not st.session_state['autenticado']:
-    st.markdown("<h1 style='text-align:center; color:#10b981; font-weight:900; margin-top:50px;'>🏭 INDUSTRIAL ANALYTICS HUB</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center; color:#64748b;'>Efetue o login ou realize o seu cadastro para acessar as visões operacionais.</p>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align:center; color:#10b981; font-weight:900; margin-top:40px;'>🏭 INDUSTRIAL ANALYTICS HUB</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center; color:#64748b;'>Selecione a opção desejada para entrar no ecossistema da produção.</p>", unsafe_allow_html=True)
     
-    col_login, col_cadastro = st.columns(2)
+    # Substituição das colunas pelas abas limpas na tela
+    col_centro = st.columns([1, 2, 1])[1]
     
-    with col_login:
-        st.markdown("<div class='section-header'>📋 ACESSAR SISTEMA</div>", unsafe_allow_html=True)
-        login_user = st.text_input("Usuário / Login", key="login_u").strip().lower()
-        senha_user = st.text_input("Senha", type="password", key="senha_u")
+    with col_centro:
+        aba_login, aba_cadastro = st.tabs(["🔐 ACESSAR SISTEMA", "📝 CRIAR NOVA CONTA"])
         
-        if st.button("🔓 ENTRAR NO HUB", use_container_width=True, type="primary"):
-            if not login_user or not senha_user:
-                st.warning("Preencha todos os campos para autenticar.")
-            else:
-                engine = obter_engine()
-                df_auth = pd.read_sql_query(
-                    text("SELECT login, cargo FROM usuarios WHERE login = :login AND senha = :senha"),
-                    engine, params={"login": login_user, "senha": hash_senha(senha_user)}
-                )
-                if not df_auth.empty:
-                    st.session_state['autenticado'] = True
-                    st.session_state['usuario_logado'] = df_auth.iloc[0]['login']
-                    st.session_state['cargo_logado'] = df_auth.iloc[0]['cargo']
-                    st.success(f"Bem-vindo, {st.session_state['usuario_logado']}!")
-                    st.rerun()
+        with aba_login:
+            st.markdown("<div class='section-header'>📋 IDENTIFICAÇÃO DE USUÁRIO</div>", unsafe_allow_html=True)
+            login_user = st.text_input("Usuário / Login", key="login_u").strip().lower()
+            senha_user = st.text_input("Senha", type="password", key="senha_u")
+            
+            if st.button("🔓 ENTRAR NO HUB", use_container_width=True, type="primary"):
+                if not login_user or not senha_user:
+                    st.warning("Preencha todos os campos para autenticar.")
                 else:
-                    st.error("Usuário ou senha incorretos.")
-                    
-    with col_cadastro:
-        # Chave dinâmica para forçar a limpeza total do bloco de cadastro
-        v_cad = st.session_state['contador_cadastro']
-        
-        st.markdown("<div class='section-header'>📝 AUTO CADASTRO OPERACIONAL</div>", unsafe_allow_html=True)
-        cad_user = st.text_input("Defina seu Login", key=f"cad_u_{v_cad}").strip().lower()
-        cad_senha = st.text_input("Defina sua Senha", type="password", key=f"cad_s_{v_cad}")
-        cad_conf_senha = st.text_input("Confirme sua Senha", type="password", key=f"cad_cs_{v_cad}")
-        cad_cargo = st.selectbox("Selecione seu Cargo", ["Gerente", "Coordenador", "Analista", "Operador", "Menor Aprendiz", "Assistente"], key=f"cad_c_{v_cad}")
-        
-        if st.button("💾 REGISTRAR MEU USUÁRIO", use_container_width=True):
-            if not cad_user or not cad_senha or not cad_conf_senha:
-                st.error("Todos os campos do formulário são obrigatórios.")
-            elif cad_senha != cad_conf_senha:
-                st.error("A confirmação de senha não confere com a senha digitada.")
-            else:
-                engine = obter_engine()
-                try:
-                    with engine.begin() as conn:
-                        conn.execute(text("""
-                            INSERT INTO usuarios (login, senha, cargo) VALUES (:login, :senha, :cargo)
-                        """), {"login": cad_user, "senha": hash_senha(cad_senha), "cargo": cad_cargo})
-                    
-                    # Altera o estado para limpar o formulário e recarrega
-                    st.session_state['contador_cadastro'] += 1
-                    st.success("🎉 Cadastro realizado com sucesso! Utilize o painel ao lado para fazer o login.")
-                    st.rerun()
-                except Exception as e:
-                    st.error("Este nome de usuário já está sendo utilizado no sistema.")
+                    engine = obter_engine()
+                    df_auth = pd.read_sql_query(
+                        text("SELECT login, cargo FROM usuarios WHERE login = :login AND senha = :senha"),
+                        engine, params={"login": login_user, "senha": hash_senha(senha_user)}
+                    )
+                    if not df_auth.empty:
+                        st.session_state['autenticado'] = True
+                        st.session_state['usuario_logado'] = df_auth.iloc[0]['login']
+                        st.session_state['cargo_logado'] = df_auth.iloc[0]['cargo']
+                        st.success(f"Bem-vindo, {st.session_state['usuario_logado']}!")
+                        st.rerun()
+                    else:
+                        st.error("Usuário ou senha incorretos.")
+                        
+        with aba_cadastro:
+            v_cad = st.session_state['contador_cadastro']
+            
+            st.markdown("<div class='section-header'>📝 FORMULÁRIO DE AUTO CADASTRO</div>", unsafe_allow_html=True)
+            cad_user = st.text_input("Defina seu Login", key=f"cad_u_{v_cad}").strip().lower()
+            cad_senha = st.text_input("Defina sua Senha (Mínimo 8 caracteres)", type="password", key=f"cad_s_{v_cad}")
+            cad_conf_senha = st.text_input("Confirme sua Senha", type="password", key=f"cad_cs_{v_cad}")
+            cad_cargo = st.selectbox("Selecione seu Cargo", ["Gerente", "Coordenador", "Analista", "Operador", "Menor Aprendiz", "Assistente"], key=f"cad_c_{v_cad}")
+            
+            # BLOQUEIO OPERACIONAL DE SENHA FRACA
+            lista_erros_senha = validar_forca_senha(cad_senha) if cad_senha else []
+            
+            if cad_senha:
+                if len(lista_erros_senha) > 0:
+                    st.markdown("##### 🚨 Requisitos de Senha Pendentes:")
+                    for erro in lista_erros_senha:
+                        st.markdown(f"<span style='color:#ef4444; font-size:0.9rem;'>✖ {erro}</span>", unsafe_allow_html=True)
+                else:
+                    st.markdown("<span style='color:#10b981; font-weight:600;'>✔ Estrutura de Senha Forte Detectada!</span>", unsafe_allow_html=True)
+            
+            # O botão só executa o salvamento se não houver erros na lista de validação
+            if st.button("💾 REGISTRAR MEU USUÁRIO", use_container_width=True, disabled=len(lista_erros_senha) > 0):
+                if not cad_user or not cad_senha or not cad_conf_senha:
+                    st.error("Todos os campos do formulário são obrigatórios.")
+                elif cad_senha != cad_conf_senha:
+                    st.error("A confirmação de senha não confere com a senha digitada.")
+                else:
+                    engine = obter_engine()
+                    try:
+                        with engine.begin() as conn:
+                            conn.execute(text("""
+                                INSERT INTO usuarios (login, senha, cargo) VALUES (:login, :senha, :cargo)
+                            """), {"login": cad_user, "senha": hash_senha(cad_senha), "cargo": cad_cargo})
+                        
+                        st.session_state['contador_cadastro'] += 1
+                        st.success("🎉 Cadastro realizado! Vá para a aba '🔐 ACESSAR SISTEMA' para entrar.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error("Este nome de usuário já está sendo utilizado no sistema.")
 
 # =========================================================
 # SISTEMA PRINCIPAL (LIBERADO APÓS LOGAR)
@@ -595,7 +623,7 @@ else:
                         engine = obter_engine()
                         with engine.begin() as conn:
                             conn.execute(text("""
-                                INSERT INTO reportes (data_registro, turno, coordenador, ocorrencias, maq_analisada, problema, pq1, pq2, pq3, pq4, pq5, oque, quem, quando, status) 
+                                INSERT INTO reportes (data_registro, turno, coordenador, ocorrências, maq_analisada, problema, pq1, pq2, pq3, pq4, pq5, oque, quem, quando, status) 
                                 VALUES (:data, :turno, :coord, :ocorrencias, :maq, :prob, :p1, :p2, :p3, :p4, :p5, :oque, :quem, :quando, :status)
                             """), {"data": str(data_rep), "turno": turno_rep, "coord": coord_rep, "ocorrencias": txt_ocorrencias, "maq": maq_an, "prob": prob_an, "p1": p1, "p2": p2, "p3": p3, "p4": p4, "p5": p5, "oque": action_oque, "quem": action_quem, "quando": action_quando, "status": status_inicial})
                         st.success("🎉 Reporte alocado com sucesso no Neon SQL!")
@@ -716,7 +744,7 @@ else:
                         row_s = df_db_sem[df_db_sem['id'] == id_sel_sem].iloc[0]
                         esc1, esc2, esc3 = st.columns(3)
                         with esc1: es_pior = st.text_input("Editar Pior Parada", value=str(row_s['pior_parada']))
-                        with ec2: es_status = st.selectbox("Editar Status", ["Pendente", "Em Andamento", "Resolvido"], index=["Pendente", "Em Andamento", "Resolvido"].index(row_s['status']), key='status_ed_sem')
+                        with st.container(): es_status = st.selectbox("Editar Status", ["Pendente", "Em Andamento", "Resolvido"], index=["Pendente", "Em Andamento", "Resolvido"].index(row_s['status']), key='status_ed_sem')
                         with esc3: es_maq = st.text_input("Editar Máquina", value=str(row_s['maquina'])).upper()
                         ep1 = st.text_input("1º Por que?", value=str(row_s['pq1']), key='ep1')
                         ep2 = st.text_input("2º Por que?", value=str(row_s['pq2']), key='ep2')
@@ -905,7 +933,7 @@ else:
                                     ls_it = st.number_input(f"Loss % ({m_b})", min_value=0.0, max_value=100.0, value=val_loss, step=0.1, key=f"e_ls_{m_b}")
                                 with ce3:
                                     pi_it = st.text_input(f"Palete Inicial ({m_b})", value=val_pi, key=f"e_pi_{m_b}").upper()
-                                    pf_it = st.text_input(f"Palete Final ({m_b})", value=val_pf, key=f"e_pf_{m_b}").upper()
+                                    pf_it = st.text_input(f"Palete Final ({m_b})", value=val_pfim, key=f"e_pf_{m_b}").upper()
                                     tt_it = st.number_input(f"Total Ordem ({m_b})", min_value=0, value=val_tt, step=1, key=f"e_tt_{m_b}")
                             mapa_edicao_final[m_b] = {"id": id_reg, "itens": tx_it, "sku": sk_it, "prod": pr_it, "loss": ls_it, "pal_ini": pi_it, "pal_fim": pf_it, "tot": tt_it}
                         
