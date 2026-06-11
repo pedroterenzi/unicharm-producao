@@ -15,7 +15,6 @@ st.set_page_config(layout="wide", page_title="Industrial Analytics Hub", page_ic
 def init_db():
     conn = sqlite3.connect('reportes_turno.db')
     cursor = conn.cursor()
-    # Tabela principal dos reportes de turno
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS reportes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -113,7 +112,7 @@ st.markdown("""
     .five-why-box { border: 2px solid #1e293b; padding: 15px; background: #ffffff; color: #000; margin-top: 15px; }
     .five-why-line { border-bottom: 1px solid #000; padding: 10px 0; font-size: 0.9rem; }
 
-    /* Headers Estilizados */
+    /* Reporte Diário Header */
     .section-header {
         background: #f1f5f9; padding: 10px; border-radius: 5px;
         color: #0f172a; font-weight: 800; text-transform: uppercase;
@@ -201,15 +200,7 @@ with st.sidebar:
     up_datas = st.file_uploader("📂 Carregar Excel DATAS (.xlsx)", type=["xlsx"])
     st.markdown("---")
     if uploaded_file:
-        menu = st.radio("NAVEGAÇÃO", [
-            "📋 REPORTE DIÁRIO", 
-            "📈 PERFORMANCE", 
-            "🛑 TOP 10 PARADAS", 
-            "📅 CALENDÁRIO", 
-            "📋 ANÁLISE SEMANAL",
-            "📝 LANÇAR REPORTE",     # Nova aba solicitada
-            "📊 ACOMPANHAMENTO"      # Nova aba solicitada
-        ])
+        menu = st.radio("NAVEGAÇÃO", ["📋 REPORTE DIÁRIO", "📈 PERFORMANCE", "🛑 TOP 10 PARADAS", "📅 CALENDÁRIO", "📋 ANÁLISE SEMANAL", "📝 LANÇAR REPORTE", "📊 ACOMPANHAMENTO"])
 
 if uploaded_file:
     df_order, df_stops = load_data(uploaded_file)
@@ -285,10 +276,8 @@ if uploaded_file:
             st.markdown(f"<div class='section-header'>DETALHAMENTO POR MÁQUINA - {dia.strftime('%d/%m/%Y')}</div>", unsafe_allow_html=True)
             df_dia = df_order[df_order['Data'].dt.date == dia]
             res = df_dia.groupby(['Categoria', 'Máquina']).agg({'Run Time':'sum','Horário Padrão':'sum','Machine Counter':'sum','Peças Estoque - Ajuste':'sum'}).reset_index()
-            
             res['Movimentação %'] = (res['Run Time'] / res['Horário Padrão'].replace(0,1) * 100).apply(lambda x: f"{x:.2f}%".replace('.', ','))
             res['Perda %'] = ((res['Machine Counter'] - res['Peças Estoque - Ajuste']) / res['Machine Counter'].replace(0,1) * 100).apply(lambda x: f"{x:.2f}%".replace('.', ','))
-            
             res['Peças Estoque'] = res['Peças Estoque - Ajuste'].apply(fmt)
             st.table(res[['Categoria','Máquina','Movimentação %','Perda %','Peças Estoque']])
 
@@ -304,7 +293,6 @@ if uploaded_file:
         
         str_maquinas = ", ".join(f_maq) if f_maq else "Nenhuma"
         str_turnos_f = ", ".join(f_turno) if f_turno else "Nenhum"
-        
         st.markdown(f"## 📈 Performance Industrial — Máquina(s): {str_maquinas} | Turno(s): {str_turnos_f}")
         
         st.markdown(f"""
@@ -335,10 +323,8 @@ if uploaded_file:
             (df_stops['Máquina'].isin(f_maq_s)) & 
             (df_stops['Turno'].isin(f_turno_s))
         ]
-        
         str_maquinas_s = ", ".join(f_maq_s) if f_maq_s else "Nenhuma"
         str_turnos_s = ", ".join(f_turno_s) if f_turno_s else "Nenhum"
-        
         st.markdown(f"## 🛑 Análise de Paradas — Máquina(s): {str_maquinas_s} | Turno(s): {str_turnos_s}")
         
         st.plotly_chart(px.bar(df_s_f.groupby('Problema')['Minutos'].sum().sort_values().tail(10), orientation='h', title="Minutos Totais", color_discrete_sequence=['#f43f5e']).update_layout(paper_bgcolor='white', plot_bgcolor='white', font={'color':'black'}), use_container_width=True)
@@ -431,51 +417,32 @@ if uploaded_file:
             <b>CAUSA RAIZ / PLANO DE AÇÃO:</b> <div class="five-why-line"></div><div class="five-why-line"></div></div>""", unsafe_allow_html=True)
 
     # =========================================================
-    # NOVA ABA: LANÇAR REPORTE (ALOCAÇÃO NO SQlite)
+    # ABA: LANÇAR REPORTE
     # =========================================================
     elif menu == "📝 LANÇAR REPORTE":
         st.markdown("## 📝 Formulário de Registro de Turno")
-        st.write("Insira as informações do turno atual abaixo para salvar no banco de dados local.")
-        
         with st.form("form_reporte", clear_on_submit=True):
             c1, c2, c3 = st.columns(3)
-            with c1:
-                data_rep = st.date_input("Data do Turno", datetime.now().date())
-            with c2:
-                turno_rep = st.selectbox("Turno", ["T1", "T2", "T3"])
-            with c3:
-                coord_rep = st.text_input("Coordenador Responsável").upper()
-                
+            with c1: data_rep = st.date_input("Data do Turno", datetime.now().date())
+            with c2: turno_rep = st.selectbox("Turno", ["T1", "T2", "T3"])
+            with c3: coord_rep = st.text_input("Coordenador Responsável").upper()
             st.markdown("<div class='section-header'>1. Principais Ocorrências / Paradas do Turno</div>", unsafe_allow_html=True)
-            txt_ocorrencias = st.text_area(
-                "Descreva as ocorrências (Ex: Máquina [2]: [Colisão do Garfo] - Duração: [310] min. Status: [Pendente])",
-                height=120
-            )
-            
+            txt_ocorrencias = st.text_area("Descreva as ocorrências", height=120)
             st.markdown("<div class='section-header'>2. Análise de Causa Raiz (Top Ofensor)</div>", unsafe_allow_html=True)
             cc1, cc2 = st.columns(2)
-            with cc1:
-                maq_an = st.text_input("Máquina Analisada (Ex: MQ.2)").upper()
-            with cc2:
-                prob_an = st.text_input("Problema Foco")
-                
+            with cc1: maq_an = st.text_input("Máquina Analisada").upper()
+            with cc2: prob_an = st.text_input("Problema Foco")
             p1 = st.text_input("Por que 1?")
             p2 = st.text_input("Por que 2?")
             p3 = st.text_input("Por que 3?")
             p4 = st.text_input("Por que 4?")
             p5 = st.text_input("Por que 5? (Causa Raiz)")
-            
             st.markdown("<div class='section-header'>3. Plano de Ação Imediato</div>", unsafe_allow_html=True)
             ccc1, ccc2, ccc3 = st.columns([2, 1, 1])
-            with ccc1:
-                action_oque = st.text_area("O quê (Ações)")
-            with ccc2:
-                action_quem = st.text_input("Quem (Responsável)")
-            with ccc3:
-                action_quando = st.text_input("Quando (Prazo)")
-                
+            with ccc1: action_oque = st.text_area("O quê (Ações)")
+            with ccc2: action_quem = st.text_input("Quem (Responsável)")
+            with ccc3: action_quando = st.text_input("Quando (Prazo)")
             status_inicial = st.selectbox("Status Inicial do Plano", ["Pendente", "Em Andamento", "Resolvido"])
-            
             submit = st.form_submit_button("💾 SALVAR REPORTE NO BANCO DE DADOS")
             
             if submit:
@@ -485,66 +452,62 @@ if uploaded_file:
                     conn = sqlite3.connect('reportes_turno.db')
                     cursor = conn.cursor()
                     cursor.execute("""
-                        INSERT INTO reportes (
-                            data_registro, turno, coordenador, ocorrencias, maq_analisada, problema,
-                            pq1, pq2, pq3, pq4, pq5, oque, quem, quando, status
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        str(data_rep), turno_rep, coord_rep, txt_ocorrencias, maq_an, prob_an,
-                        p1, p2, p3, p4, p5, action_oque, action_quem, action_quando, status_inicial
-                    ))
+                        INSERT INTO reportes (data_registro, turno, coordenador, ocorrencias, maq_analisada, problema,
+                        pq1, pq2, pq3, pq4, pq5, oque, quem, quando, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (str(data_rep), turno_rep, coord_rep, txt_ocorrencias, maq_an, prob_an, p1, p2, p3, p4, p5, action_oque, action_quem, action_quando, status_inicial))
                     conn.commit()
                     conn.close()
                     st.success("🎉 Reporte alocado e registrado com sucesso no banco de dados local!")
 
     # =========================================================
-    # NOVA ABA: ACOMPANHAMENTO (GESTÃO E EDICAO DO STATUS)
+    # ABA: ACOMPANHAMENTO (COM OPÇÃO DE ATUALIZAR E EXCLUIR)
     # =========================================================
     elif menu == "📊 ACOMPANHAMENTO":
         st.markdown("## 📊 Painel de Acompanhamento de Ações")
-        st.write("Consulte históricos salvos, verifique prazos e atualize os status de planos pendentes.")
-        
         conn = sqlite3.connect('reportes_turno.db')
         df_db = pd.read_sql_query("SELECT * FROM reportes ORDER BY data_registro DESC", conn)
         conn.close()
         
         if df_db.empty:
-            st.info("Nenhum registro encontrado no banco de dados local. Use a aba de lançamento.")
+            st.info("Nenhum registro encontrado no banco de dados local.")
         else:
-            # Filtro interativo simples no topo
-            st.markdown("### Filtros Rápidos do Banco de Dados")
             f_col1, f_col2 = st.columns(2)
-            with f_col1:
-                filtro_status = st.multiselect("Filtrar por Status", df_db['status'].unique(), default=df_db['status'].unique())
-            with f_col2:
-                filtro_turno = st.multiselect("Filtrar por Turno", df_db['turno'].unique(), default=df_db['turno'].unique())
-                
+            with f_col1: filtro_status = st.multiselect("Filtrar por Status", df_db['status'].unique(), default=df_db['status'].unique())
+            with f_col2: filtro_turno = st.multiselect("Filtrar por Turno", df_db['turno'].unique(), default=df_db['turno'].unique())
             df_filtrado_db = df_db[(df_db['status'].isin(filtro_status)) & (df_db['turno'].isin(filtro_turno))]
+            st.dataframe(df_filtrado_db[['id', 'data_registro', 'turno', 'coordenador', 'maq_analisada', 'problema', 'quem', 'quando', 'status']], use_container_width=True)
             
-            st.dataframe(df_filtrado_db[[
-                'id', 'data_registro', 'turno', 'coordenador', 'maq_analisada', 
-                'problema', 'quem', 'quando', 'status'
-            ]], use_container_width=True)
-            
-            st.markdown("<div class='section-header'>Atualizar Status / Acompanhamento de Ação</div>", unsafe_allow_html=True)
-            id_selecionado = st.number_input("Digite o ID do reporte para alterar o Status:", min_value=1, step=1)
+            st.markdown("<div class='section-header'>Gerenciar Reporte Existente</div>", unsafe_allow_html=True)
+            id_selecionado = st.number_input("Digite o ID do reporte para gerenciar:", min_value=1, step=1)
             
             if id_selecionado in df_db['id'].values:
                 row_sel = df_db[df_db['id'] == id_selecionado].iloc[0]
-                st.info(f"**Máquina:** {row_sel['maq_analisada']} | **Ação Cadastrada:** {row_sel['oque']}")
+                st.info(f"**Máquina:** {row_sel['maq_analisada']} | **Problema:** {row_sel['problema']} | **Ação:** {row_sel['oque']}")
                 
-                novo_status = st.selectbox("Selecione o Novo Status:", ["Pendente", "Em Andamento", "Resolvido"], index=["Pendente", "Em Andamento", "Resolvido"].index(row_sel['status']))
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    novo_status = st.selectbox("Selecione o Novo Status:", ["Pendente", "Em Andamento", "Resolvido"], index=["Pendente", "Em Andamento", "Resolvido"].index(row_sel['status']))
+                    if st.button("🔄 ATUALIZAR STATUS NO BANCO"):
+                        conn = sqlite3.connect('reportes_turno.db')
+                        cursor = conn.cursor()
+                        cursor.execute("UPDATE reportes SET status = ? WHERE id = ?", (novo_status, int(id_selecionado)))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"Status do ID {id_selecionado} alterado para {novo_status}!")
+                        st.rerun()
                 
-                if st.button("🔄 ATUALIZAR STATUS NO BANCO"):
-                    conn = sqlite3.connect('reportes_turno.db')
-                    cursor = conn.cursor()
-                    cursor.execute("UPDATE reportes SET status = ? WHERE id = ?", (novo_status, int(id_selecionado)))
-                    conn.commit()
-                    conn.close()
-                    st.success(f"Status do ID {id_selecionado} alterado com sucesso! Recarregando...")
-                    st.rerun()
+                # RECURSO ADICIONADO: Botão de exclusão definitiva do registro
+                with col_btn2:
+                    st.write("### Zona de Perigo")
+                    if st.button("❌ EXCLUIR REPORTE DEFINITIVAMENTE", type="primary"):
+                        conn = sqlite3.connect('reportes_turno.db')
+                        cursor = conn.cursor()
+                        cursor.execute("DELETE FROM reportes WHERE id = ?", (int(id_selecionado),))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"O reporte de ID {id_selecionado} foi excluído com sucesso do banco de dados!")
+                        st.rerun()
             else:
                 st.caption("Insira um ID válido presente na tabela acima para gerenciar.")
-
 else:
     st.info("💡 Por favor, carregue os arquivos Excel para iniciar.")
