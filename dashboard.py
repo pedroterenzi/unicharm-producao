@@ -42,7 +42,7 @@ def init_db():
                 id SERIAL PRIMARY KEY, login TEXT UNIQUE, senha TEXT, cargo TEXT
             )
         """))
-        # Tabela de Reportes Diários (Sem campos fixos de ação)
+        # Tabela de Reportes Diários (Estrutura 1 para Muitos)
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS reportes (
                 id SERIAL PRIMARY KEY, data_registro TEXT, turno TEXT, coordenador TEXT,
@@ -50,21 +50,21 @@ def init_db():
                 pq1 TEXT, pq2 TEXT, pq3 TEXT, pq4 TEXT, pq5 TEXT
             )
         """))
-        # TABELA RELACIONADA: Ações dos Reportes Diários (Multi-Ações)
+        # Tabela de Ações Relacionadas aos Reportes Diários
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS acoes_reportes (
                 id SERIAL PRIMARY KEY, reporte_id INTEGER REFERENCES reportes(id) ON DELETE CASCADE,
                 oque TEXT, quem TEXT, quando TEXT, status TEXT
             )
         """))
-        # Tabela de Análises Semanais (Sem campos fixos de ação)
+        # Tabela de Análises Semanais (Estrutura 1 para Muitos)
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS analises_semanais (
                 id SERIAL PRIMARY KEY, data_registro TEXT, turno TEXT, maquina TEXT,
                 pior_parada TEXT, pq1 TEXT, pq2 TEXT, pq3 TEXT, pq4 TEXT, pq5 TEXT, causa_raiz TEXT
             )
         """))
-        # TABELA RELACIONADA: Ações das Análises Semanais (Multi-Ações)
+        # Tabela de Ações Relacionadas às Análises Semanais
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS acoes_semanais (
                 id SERIAL PRIMARY KEY, analise_id INTEGER REFERENCES analises_semanais(id) ON DELETE CASCADE,
@@ -221,7 +221,7 @@ def load_planner_metas_advanced(file, data_ref):
         return {}, {}, 0, 0
 
 # =========================================================
-# TELA DE LOGIN E CADASTRO
+# TELA DE LOGIN E CADASTRO VIA ABAS
 # =========================================================
 if not st.session_state['autenticado']:
     st.markdown("<h1 style='text-align:center; color:#10b981; font-weight:900; margin-top:40px;'>🏭 INDUSTRIAL ANALYTICS HUB</h1>", unsafe_allow_html=True)
@@ -429,7 +429,7 @@ else:
             st.markdown(f"""<div class="five-why-box"><h3>ANÁLISE 5 PORQUÊS: {pior_p}</h3></div>""", unsafe_allow_html=True)
 
         # =========================================================
-        # 📝 LANÇAR REPORTE (DINÂMICO - MULTI AÇÕES VINCULADAS)
+        # 📝 LANÇAR REPORTE (SISTEMA DE MÚLTIPLAS AÇÕES ATIVADO)
         # =========================================================
         elif menu == "📝 LANÇAR REPORTE":
             st.markdown("## 📝 Registro de Turno + Plano de Ações Coletivas")
@@ -450,7 +450,10 @@ else:
                 p4 = st.text_input("Por que 4?")
                 p5 = st.text_input("Por que 5? (Causa Raiz)")
                 
-                st.markdown("<div class='section-header'>2. Plano de Ação (Adicione quantas linhas de ação desejar)</div>", unsafe_allow_html=True)
+                # 🛠️ CORREÇÃO DA TABELA DINÂMICA: SUBSTITUINDO AS CAIXAS TEXTO FIXAS ANTIGAS
+                st.markdown("<div class='section-header'>2. Matriz Interativa de Ações (Adicione quantas linhas precisar)</div>", unsafe_allow_html=True)
+                st.caption("💡 Clique duas vezes em uma célula para editar ou clique no '+' abaixo da tabela para adicionar novas ações.")
+                
                 df_acoes_inicial = pd.DataFrame(columns=["O que (Ação)", "Quem (Responsável)", "Quando (Prazo)", "Status"])
                 df_acoes_inicial.loc[0] = ["", "", "", "Pendente"]
                 
@@ -460,9 +463,9 @@ else:
                     use_container_width=True
                 )
                 
-                btn_salvar = st.form_submit_button("💾 SALVAR REPORTE E TODAS AS AÇÕES VINCULADAS")
+                btn_salvar = st.form_submit_button("💾 SALVAR REPORTE E PLANO DE AÇÕES NA NUVEM")
                 if btn_salvar:
-                    if not coord_rep or not prob_an: st.error("Campos essenciais são obrigatórios.")
+                    if not coord_rep or not prob_an: st.error("Campos Coordenador e Problema Foco são obrigatórios.")
                     else:
                         engine = obter_engine()
                         with engine.begin() as conn:
@@ -480,7 +483,7 @@ else:
                                         VALUES (:reporte_id, :oque, :quem, :quando, :status)
                                     """), {"reporte_id": reporte_id, "oque": row["O que (Ação)"], "quem": str(row["Quem (Responsável)"]).upper(), "quando": row["Quando (Prazo)"], "status": row["Status"]})
                                     qtd_salva += 1
-                        st.success(f"🎉 Reporte ID #{reporte_id} salvo com {qtd_salva} ações vinculadas!")
+                        st.success(f"🎉 Reporte ID #{reporte_id} salvo com sucesso com {qtd_salva} ações vinculadas!")
 
         # =========================================================
         # 📊 ABA: ACOMPANHAMENTO (MULTI AÇÕES RELACIONADAS)
@@ -497,11 +500,11 @@ else:
                 
                 if id_selecionado in df_rep['id'].values:
                     df_acoes_vinculadas = pd.read_sql_query(text("SELECT id, oque as \"O que (Ação)\", quem as \"Quem (Responsável)\", quando as \"Quando (Prazo)\", status as \"Status\" FROM acoes_reportes WHERE reporte_id = :id"), engine, params={"id": int(id_selecionado)})
-                    st.markdown(f"#### 🛠️ Matriz de Planos Vinculados ao ID #{id_selecionado}")
+                    st.markdown(f"#### 🛠 ... Matriz de Planos Vinculados ao ID #{id_selecionado}")
                     
                     tabela_edicao = st.data_editor(
                         df_acoes_vinculadas, num_rows="dynamic",
-                        column_config={"Status": st.column_config.SelectboxColumn("Status", options=["Pendente", "Em Andamento", "Resolvido"], required=True)},
+                        column_config={"Status": st.column_config.SelectboxColumn("Status", options=["Pendente", "Em Andamento", "Resolvido", "Cancelado"], required=True)},
                         use_container_width=True, key=f"ed_grid_{id_selecionado}"
                     )
                     
@@ -541,7 +544,7 @@ else:
                 spq4 = st.text_input("4º Por que?")
                 spq5 = st.text_input("5º Por que? (Causa Raiz)")
                 
-                st.markdown("<div class='section-header'>Plano de Ações Semanais Combinadas</div>", unsafe_allow_html=True)
+                st.markdown("<div class='section-header'>Plano de Ações Semanais Combinadas (Multi-Ações)</div>", unsafe_allow_html=True)
                 df_acoes_sem_inicial = pd.DataFrame(columns=["O que (Ação Semanal)", "Quem (Responsável)", "Quando (Prazo)", "Status"])
                 df_acoes_sem_inicial.loc[0] = ["", "", "", "Pendente"]
                 
@@ -613,7 +616,7 @@ else:
                             st.warning("Excluída."); st.rerun()
 
         # =========================================================
-        # 📊 ABA: APRESENTAÇÃO SEMANAL (CORRIGIDA)
+        # 📊 ABA: APRESENTAÇÃO SEMANAL
         # =========================================================
         elif menu == "📊 APRESENTAÇÃO SEMANAL":
             st.markdown("<h2 style='text-align:center;'>📊 Painel de Apresentação Semanal Integrada</h2>")
@@ -629,7 +632,7 @@ else:
             
             c_kpi1, c_kpi2 = st.columns(2)
             mov_sem = (df_ap_maq["Run Time"].sum() / df_ap_maq["Horário Padrão"].replace(0,1).sum() * 100) if not df_ap_maq.empty else 0
-            loss_sem = ((df_ap_maq["Machine Counter"].sum() - df_ap_maq["Peças Estoque - Ajuste'].sum()) / df_ap_maq["Machine Counter"].replace(0,1).sum() * 100) if not df_ap_maq.empty else 0
+            loss_sem = ((df_ap_maq["Machine Counter"].sum() - df_ap_maq["Peças Estoque - Ajuste"].sum()) / df_ap_maq["Machine Counter"].replace(0,1).sum() * 100) if not df_ap_maq.empty else 0
             
             with c_kpi1: st.plotly_chart(mini_gauge("Movimentação Semanal", mov_sem, "#10b981", 85, 140), use_container_width=True)
             with c_kpi2: st.plotly_chart(mini_gauge("Loss Semanal", loss_sem, "#e74c3c", 5, 140), use_container_width=True)
@@ -653,7 +656,7 @@ else:
                 st.dataframe(df_list_ac, use_container_width=True)
 
         # =========================================================
-        # 📋 NIPPO COORDENADORES (COM SISTEMA DE EDIÇÃO DE LINHAS)
+        # 📋 NIPPO COORDENADORES
         # =========================================================
         elif menu == "📋 NIPPO COORDENADORES":
             st.markdown("## 📋 Nippo Coordenadores — Troca de Turno Operacional")
@@ -720,7 +723,7 @@ else:
                             st.markdown(f"🔹 **{linha['maquina']} — SKU: {linha['sku']}** (Turno: {linha['turno']} | Coord: {linha['coordenador']} | Tec: {linha['tecnico']})")
                             st.info(linha['itens_compartilhar'])
 
-                st.markdown("<div class='section-header'>✏ ... Central de Gerenciamento e Modificações do Nippo</div>", unsafe_allow_html=True)
+                st.markdown("<div class='section-header'>✏️ Central de Gerenciamento e Modificações do Nippo</div>", unsafe_allow_html=True)
                 col_ed1, col_ed2 = st.columns(2)
                 with col_ed1: target_data_ed = st.date_input("Selecione a Data para Editar", date.today(), key="tg_dt_ed")
                 with col_ed2: target_turno_ed = st.selectbox("Selecione o Turno para Editar", ["1º Turno", "2º Turno", "3º Turno"], index=2, key="tg_tr_ed")
@@ -752,7 +755,7 @@ else:
                                 with ce2:
                                     sk_it = st.text_input(f"SKU ({m_b})", value=val_sk, key=f"e_sk_{m_b}").upper()
                                     pr_it = st.number_input(f"Produtividade % ({m_b})", min_value=0.0, max_value=100.0, value=val_pr, step=0.1, key=f"e_pr_{m_b}")
-                                    ls_it = st.number_input(f"Loss % ({m_b})", min_value=0.0, max_value=100.0, value=val_ls, step=0.1, key=f"e_ls_{m_b}")
+                                    ls_it = st.number_input(f"Loss % ({m_b})", min_value=0.0, max_value=100.0, value=val_loss, step=0.1, key=f"e_ls_{m_b}")
                                 with ce3:
                                     pi_it = st.text_input(f"Palete Inicial ({m_b})", value=val_pi, key=f"e_pi_{m_b}").upper()
                                     pf_it = st.text_input(f"Palete Final ({m_b})", value=val_pf, key=f"e_pf_{m_b}").upper()
