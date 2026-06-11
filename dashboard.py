@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, date
 from sqlalchemy import create_engine, text
 import io
 import hashlib
-import re  # Biblioteca nativa para validação de padrões de texto (regex)
+import re
 
 # 1. CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(layout="wide", page_title="Industrial Analytics Hub", page_icon="⚙️")
@@ -21,19 +21,14 @@ CONNECTION_STRING = "postgresql://neondb_owner:npg_obg1nxhT6GdK@ep-bitter-dream-
 def obter_engine():
     return create_engine(CONNECTION_STRING, pool_pre_ping=True)
 
-# Função auxiliar para criptografar senhas (Segurança Industrial)
 def hash_senha(senha):
     return hashlib.sha256(str.encode(senha)).hexdigest()
 
-# Função para validar a força da senha de forma robusta
 def validar_forca_senha(senha):
     erros = []
-    if len(senha) < 8:
-        erros.append("Mínimo de 8 caracteres")
-    if not re.search(r"[A-Z]", senha):
-        erros.append("Pelo menos 1 letra MAIÚSCULA")
-    if not re.search(r"[0-9]", senha):
-        erros.append("Pelo menos 1 número")
+    if len(senha) < 8: erros.append("Mínimo de 8 caracteres")
+    if not re.search(r"[A-Z]", senha): erros.append("Pelo menos 1 letra MAIÚSCULA")
+    if not re.search(r"[0-9]", senha): erros.append("Pelo menos 1 número")
     if not re.search(r"[@#\$%\^&\*!\+=\-\[\]\{\}\(\)\|\:\;\,\.\?\/\~\`\_\\]", senha):
         erros.append("Pelo menos 1 caractere especial (@, #, $, %, etc.)")
     return erros
@@ -41,123 +36,75 @@ def validar_forca_senha(senha):
 def init_db():
     engine = obter_engine()
     with engine.begin() as conn:
-        # Tabela de Usuários com controle de cargos
+        # Tabela de Usuários
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS usuarios (
-                id SERIAL PRIMARY KEY,
-                login TEXT UNIQUE,
-                senha TEXT,
-                cargo TEXT
+                id SERIAL PRIMARY KEY, login TEXT UNIQUE, senha TEXT, cargo TEXT
             )
         """))
-        # Tabela 1: Reportes Diários de Turno (Cabeçalho da Análise)
+        # Tabela de Reportes Diários (Estrutura 1 para Muitos)
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS reportes (
-                id SERIAL PRIMARY KEY,
-                data_registro TEXT,
-                turno TEXT,
-                coordenador TEXT,
-                ocorrencias TEXT,
-                maq_analisada TEXT,
-                problema TEXT,
+                id SERIAL PRIMARY KEY, data_registro TEXT, turno TEXT, coordenador TEXT,
+                ocorrencias TEXT, maq_analisada TEXT, problema TEXT,
                 pq1 TEXT, pq2 TEXT, pq3 TEXT, pq4 TEXT, pq5 TEXT
             )
         """))
-        # NOVA TABELA AUXILIAR: Ações Relacionadas aos Reportes Diários (1 para Muitos)
+        # Tabela de Ações Relacionadas aos Reportes Diários
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS acoes_reportes (
-                id SERIAL PRIMARY KEY,
-                reporte_id INTEGER REFERENCES reportes(id) ON DELETE CASCADE,
-                oque TEXT,
-                quem TEXT,
-                quando TEXT,
-                status TEXT
+                id SERIAL PRIMARY KEY, reporte_id INTEGER REFERENCES reportes(id) ON DELETE CASCADE,
+                oque TEXT, quem TEXT, quando TEXT, status TEXT
             )
         """))
-        # Tabela 2: Análises Semanais dos Operadores (Cabeçalho da Análise)
+        # Tabela de Análises Semanais (Estrutura 1 para Muitos)
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS analises_semanais (
-                id SERIAL PRIMARY KEY,
-                data_registro TEXT,
-                turno TEXT,
-                maquina TEXT,
-                pior_parada TEXT,
-                pq1 TEXT, pq2 TEXT, pq3 TEXT, pq4 TEXT, pq5 TEXT,
-                causa_raiz TEXT
+                id SERIAL PRIMARY KEY, data_registro TEXT, turno TEXT, maquina TEXT,
+                pior_parada TEXT, pq1 TEXT, pq2 TEXT, pq3 TEXT, pq4 TEXT, pq5 TEXT, causa_raiz TEXT
             )
         """))
-        # NOVA TABELA AUXILIAR: Ações Relacionadas às Análises Semanais (1 para Muitos)
+        # Tabela de Ações Relacionadas às Análises Semanais
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS acoes_semanais (
-                id SERIAL PRIMARY KEY,
-                analise_id INTEGER REFERENCES analises_semanais(id) ON DELETE CASCADE,
-                oque TEXT,
-                quem TEXT,
-                quando TEXT,
-                status TEXT
+                id SERIAL PRIMARY KEY, analise_id INTEGER REFERENCES analises_semanais(id) ON DELETE CASCADE,
+                oque TEXT, quem TEXT, quando TEXT, status TEXT
             )
         """))
-        # Tabela 3: Tabela Nippo Coordenadores
+        # Tabela de Nippo Coordenadores
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS nippo_coordenadores (
-                id SERIAL PRIMARY KEY,
-                data TEXT,
-                turno TEXT,
-                coordenador TEXT,
-                tecnico TEXT,
-                maquina TEXT,
-                itens_compartilhar TEXT,
-                produtividade REAL,
-                loss REAL,
-                sku TEXT,
-                palete_inicial TEXT,
-                palete_final TEXT,
-                total_ordem INTEGER,
+                id SERIAL PRIMARY KEY, data TEXT, turno TEXT, coordenador TEXT, tecnico TEXT, maquina TEXT,
+                itens_compartilhar TEXT, produtividade REAL, loss REAL, sku TEXT,
+                palete_inicial TEXT, palete_final TEXT, total_ordem INTEGER,
                 data_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """))
 
-# Executa a inicialização das tabelas na nuvem
 try:
     init_db()
 except Exception as e:
     st.error(f"⚠️ Erro de Autenticação na Nuvem: {e}.")
 
 # --- CONTROLE DE SESSÃO DO USUÁRIO ---
-if 'autenticado' not in st.session_state:
-    st.session_state['autenticado'] = False
-if 'usuario_logado' not in st.session_state:
-    st.session_state['usuario_logado'] = None
-if 'cargo_logado' not in st.session_state:
-    st.session_state['cargo_logado'] = None
+if 'autenticado' not in st.session_state: st.session_state['autenticado'] = False
+if 'usuario_logado' not in st.session_state: st.session_state['usuario_logado'] = None
+if 'cargo_logado' not in st.session_state: st.session_state['cargo_logado'] = None
+if 'contador_cadastro' not in st.session_state: st.session_state['contador_cadastro'] = 0
 
-# Contador para resetar a tela de cadastro após sucesso
-if 'contador_cadastro' not in st.session_state:
-    st.session_state['contador_cadastro'] = 0
-
-# --- INICIALIZAÇÃO DE ESTADOS DO STREAMLIT ---
-if 'mostrar_edicao' not in st.session_state:
-    st.session_state['mostrar_edicao'] = False
-if 'id_atual' not in st.session_state:
-    st.session_state['id_atual'] = 0
-if 'mostrar_edicao_semanal' not in st.session_state:
-    st.session_state['mostrar_edicao_semanal'] = False
-if 'id_atual_semanal' not in st.session_state:
-    st.session_state['id_atual_semanal'] = 0
-if 'contador_nippo' not in st.session_state:
-    st.session_state['contador_nippo'] = 0
-if 'mostrar_edicao_nippo' not in st.session_state:
-    st.session_state['mostrar_edicao_nippo'] = False
-if 'chave_nippo_edicao' not in st.session_state:
-    st.session_state['chave_nippo_edicao'] = ""
+# --- INICIALIZAÇÃO DE ESTADOS DE INTERFACE ---
+if 'mostrar_edicao' not in st.session_state: st.session_state['mostrar_edicao'] = False
+if 'id_atual' not in st.session_state: st.session_state['id_atual'] = 0
+if 'mostrar_edicao_semanal' not in st.session_state: st.session_state['mostrar_edicao_semanal'] = False
+if 'id_atual_semanal' not in st.session_state: st.session_state['id_atual_semanal'] = 0
+if 'contador_nippo' not in st.session_state: st.session_state['contador_nippo'] = 0
+if 'mostrar_edicao_nippo' not in st.session_state: st.session_state['mostrar_edicao_nippo'] = False
+if 'chave_nippo_edicao' not in st.session_state: st.session_state['chave_nippo_edicao'] = ""
 
 def fmt(valor):
-    if pd.isna(valor) or valor is None:
-        return "0"
-    try:
-        return f"{int(valor):,}".replace(",", ".")
-    except:
-        return str(valor)
+    if pd.isna(valor) or valor is None: return "0"
+    try: return f"{int(valor):,}".replace(",", ".")
+    except: return str(valor)
 
 # --- FUNÇÃO GLOBAL DO GRÁFICO GAUGE ---
 def mini_gauge(label, value, color, target, height=150):
@@ -191,7 +138,6 @@ st.markdown("""
         background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #ffffff !important; 
         border: 1px solid #047857 !important; font-weight: 600; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2) !important;
     }
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label icon { display: none !important; }
     .metric-container { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 15px; }
     .metric-card {
         background: #f8fafc; padding: 12px; border-radius: 10px; text-align: center; border: 1px solid #e2e8f0;
@@ -212,7 +158,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. CARREGAMENTO E LIMPEZA DE ARQUIVOS
+# 2. CARREGAMENTO E LIMPEZA DE ARQUIVOS EXCEL
 @st.cache_data
 def load_data(file_obj):
     df_order = pd.read_excel(file_obj, sheet_name="Result by order")
@@ -223,8 +169,7 @@ def load_data(file_obj):
     nums = ['Run Time', 'Horário Padrão', 'Machine Counter', 'Peças Estoque - Ajuste', 'Average Speed', 'Minutos', 'QTD']
     for df in [df_order, df_stops]:
         for col in nums:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
     df_order['Data'] = pd.to_datetime(df_order['Data'], errors='coerce')
     df_order = df_order.dropna(subset=['Data'])
@@ -236,9 +181,7 @@ def load_data(file_obj):
     df_stops['Máquina'] = df_stops['Máquina'].fillna(0).astype(int).astype(str)
     df_stops['Turno'] = df_stops['Turno'].fillna(0).astype(int).astype(str)
 
-    def categorize(m): return "BABY" if m in ['2', '3', '4', '5', '6'] else "ADULTO"
-    df_order['Categoria'] = df_order['Máquina'].apply(categorize)
-    
+    df_order['Categoria'] = df_order['Máquina'].apply(lambda m: "BABY" if m in ['2', '3', '4', '5', '6'] else "ADULTO")
     return df_order, df_stops
 
 @st.cache_data
@@ -247,18 +190,14 @@ def load_planner_metas_advanced(file, data_ref):
         xls = pd.ExcelFile(file)
         target = next((s for s in xls.sheet_names if "PEÇAS" in s.upper()), None)
         df_raw = pd.read_excel(file, sheet_name=target, header=None)
-        
         row_dates = df_raw.iloc[2, :].tolist()
         maq_lines = {'1': 6, '2': 28, '3': 47, '4': 58, '5': 77, '6': 96, '7': 113}
-        
-        plan_dia = {}
-        plan_mes_acum = {}
+        plan_dia, plan_mes_acum = {}, {}
         
         idx_col_ref = None
         for i, d in enumerate(row_dates):
             if isinstance(d, (datetime, pd.Timestamp)) and d.date() == data_ref:
-                idx_col_ref = i
-                break
+                idx_col_ref = i; break
         
         if idx_col_ref is not None:
             for maq, row_idx in maq_lines.items():
@@ -277,133 +216,88 @@ def load_planner_metas_advanced(file, data_ref):
                 val = pd.to_numeric(row_meta_125[i], errors='coerce') or 0
                 if d.year == data_ref.year and d.month == data_ref.month:
                     m_total_mes += val
-                    if d.date() <= data_ref:
-                        m_mtd_total += val
-                        
+                    if d.date() <= data_ref: m_mtd_total += val
         return plan_dia, plan_mes_acum, m_total_mes, m_mtd_total
     except:
         return {}, {}, 0, 0
 
 # =========================================================
-# SEPARAÇÃO DE TELAS: SISTEMA DE LOGIN E CADASTRO VIA ABAS
+# TELA DE LOGIN E CADASTRO VIA ABAS
 # =========================================================
 if not st.session_state['autenticado']:
     st.markdown("<h1 style='text-align:center; color:#10b981; font-weight:900; margin-top:40px;'>🏭 INDUSTRIAL ANALYTICS HUB</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center; color:#64748b;'>Selecione a opção desejada para entrar no ecossistema da produção.</p>", unsafe_allow_html=True)
-    
     col_centro = st.columns([1, 2, 1])[1]
-    
     with col_centro:
         aba_login, aba_cadastro = st.tabs(["🔐 ACESSAR SISTEMA", "📝 CRIAR NOVA CONTA"])
-        
         with aba_login:
             st.markdown("<div class='section-header'>📋 IDENTIFICAÇÃO DE USUÁRIO</div>", unsafe_allow_html=True)
             login_user = st.text_input("Usuário / Login", key="login_u").strip().lower()
             senha_user = st.text_input("Senha", type="password", key="senha_u")
-            
             if st.button("🔓 ENTRAR NO HUB", use_container_width=True, type="primary"):
-                if not login_user or not senha_user:
-                    st.warning("Preencha todos os campos para autenticar.")
-                else:
-                    engine = obter_engine()
-                    df_auth = pd.read_sql_query(
-                        text("SELECT login, cargo FROM usuarios WHERE login = :login AND senha = :senha"),
-                        engine, params={"login": login_user, "senha": hash_senha(senha_user)}
-                    )
-                    if not df_auth.empty:
-                        st.session_state['autenticado'] = True
-                        st.session_state['usuario_logado'] = df_auth.iloc[0]['login']
-                        st.session_state['cargo_logado'] = df_auth.iloc[0]['cargo']
-                        st.success(f"Bem-vindo, {st.session_state['usuario_logado']}!")
-                        st.rerun()
-                    else:
-                        st.error("Usuário ou senha incorretos.")
-                        
+                engine = obter_engine()
+                df_auth = pd.read_sql_query(
+                    text("SELECT login, cargo FROM usuarios WHERE login = :login AND senha = :senha"),
+                    engine, params={"login": login_user, "senha": hash_senha(senha_user)}
+                )
+                if not df_auth.empty:
+                    st.session_state['autenticado'] = True
+                    st.session_state['usuario_logado'] = df_auth.iloc[0]['login']
+                    st.session_state['cargo_logado'] = df_auth.iloc[0]['cargo']
+                    st.rerun()
+                else: st.error("Usuário ou senha incorretos.")
         with aba_cadastro:
             v_cad = st.session_state['contador_cadastro']
-            
             st.markdown("<div class='section-header'>📝 FORMULÁRIO DE AUTO CADASTRO</div>", unsafe_allow_html=True)
             cad_user = st.text_input("Defina seu Login", key=f"cad_u_{v_cad}").strip().lower()
             cad_senha = st.text_input("Defina sua Senha (Mínimo 8 caracteres)", type="password", key=f"cad_s_{v_cad}")
             cad_conf_senha = st.text_input("Confirme sua Senha", type="password", key=f"cad_cs_{v_cad}")
-            
-            cad_cargo = st.selectbox(
-                "Selecione seu Cargo", 
-                ["Gerente", "Coordenador", "Analista", "Técnico de Produção", "Operador", "Menor Aprendiz", "Assistente"], 
-                key=f"cad_c_{v_cad}"
-            )
-            
-            # BLOQUEIO OPERACIONAL DE SENHA FRACA
+            cad_cargo = st.selectbox("Selecione seu Cargo", ["Gerente", "Coordenador", "Analista", "Técnico de Produção", "Operador", "Menor Aprendiz", "Assistente"], key=f"cad_c_{v_cad}")
             lista_erros_senha = validar_forca_senha(cad_senha) if cad_senha else []
-            
             if cad_senha:
                 if len(lista_erros_senha) > 0:
                     st.markdown("##### 🚨 Requisitos de Senha Pendentes:")
-                    for erro in lista_erros_senha:
-                        st.markdown(f"<span style='color:#ef4444; font-size:0.9rem;'>✖ {erro}</span>", unsafe_allow_html=True)
-                else:
-                    st.markdown("<span style='color:#10b981; font-weight:600;'>✔ Estrutura de Senha Forte Detectada!</span>", unsafe_allow_html=True)
-            
+                    for erro in lista_erros_senha: st.markdown(f"<span style='color:#ef4444; font-size:0.9rem;'>✖ {erro}</span>", unsafe_allow_html=True)
+                else: st.markdown("<span style='color:#10b981; font-weight:600;'>✔ Estrutura de Senha Forte Detectada!</span>", unsafe_allow_html=True)
             if st.button("💾 REGISTRAR MEU USUÁRIO", use_container_width=True, disabled=len(lista_erros_senha) > 0):
-                if not cad_user or not cad_senha or not cad_conf_senha:
-                    st.error("Todos os campos do formulário são obrigatórios.")
-                elif cad_senha != cad_conf_senha:
-                    st.error("A confirmação de senha não confere com a senha digitada.")
+                if cad_senha != cad_conf_senha: st.error("As senhas não conferem.")
                 else:
                     engine = obter_engine()
                     try:
                         with engine.begin() as conn:
-                            conn.execute(text("""
-                                INSERT INTO usuarios (login, senha, cargo) VALUES (:login, :senha, :cargo)
-                            """), {"login": cad_user, "senha": hash_senha(cad_senha), "cargo": cad_cargo})
-                        
+                            conn.execute(text("INSERT INTO usuarios (login, senha, cargo) VALUES (:login, :senha, :cargo)"), {"login": cad_user, "senha": hash_senha(cad_senha), "cargo": cad_cargo})
                         st.session_state['contador_cadastro'] += 1
                         st.success("🎉 Cadastro realizado! Vá para a aba '🔐 ACESSAR SISTEMA' para entrar.")
                         st.rerun()
-                    except Exception as e:
-                        st.error("Este nome de usuário já está sendo utilizado no sistema.")
+                    except: st.error("Usuário já existe.")
 
 # =========================================================
-# SISTEMA PRINCIPAL (LIBERADO APÓS LOGAR)
+# SISTEMA PRINCIPAL (AUTENTICADO)
 # =========================================================
 else:
     cargo = st.session_state['cargo_logado']
-    
     todas_abas = [
         "📋 REPORTE DIÁRIO", "📈 PERFORMANCE", "🛑 TOP 10 PARADAS", "📅 CALENDÁRIO", 
         "📋 ANÁLISE SEMANAL", "📝 LANÇAR REPORTE", "📊 ACOMPANHAMENTO",
         "📝 LANÇAR ANÁLISE SEMANAL", "📋 ACOMP. ANÁLISES SEMANAIS", "📊 APRESENTAÇÃO SEMANAL",
         "📋 NIPPO COORDENADORES"
     ]
-    
-    if cargo == "Operador":
-        abas_permitidas = ["📝 LANÇAR ANÁLISE SEMANAL", "📊 APRESENTAÇÃO SEMANAL"]
-    elif cargo in ["Menor Aprendiz", "Assistente"]:
-        abas_permitidas = [a for a in todas_abas if a not in ["📊 ACOMPANHAMENTO", "📋 ACOMP. ANÁLISES SEMANAIS", "📋 NIPPO COORDENADORES"]]
-    else:
-        abas_permitidas = todas_abas
+    if cargo == "Operador": abas_permitidas = ["📝 LANÇAR ANÁLISE SEMANAL", "📊 APRESENTAÇÃO SEMANAL"]
+    elif cargo in ["Menor Aprendiz", "Assistente"]: abas_permitidas = [a for a in todas_abas if a not in ["📊 ACOMPANHAMENTO", "📋 ACOMP. ANÁLISES SEMANAIS", "📋 NIPPO COORDENADORES"]]
+    else: abas_permitidas = todas_abas
 
-    # --- SIDEBAR ---
     with st.sidebar:
-        st.markdown(f"<p style='margin:0; font-size:0.85rem; color:#64748b;'>👤 Usuário: <b>{st.session_state['usuario_logado'].upper()}</b></p>", unsafe_allow_html=True)
-        st.markdown(f"<p style='margin:0; font-size:0.85rem; color:#10b981;'>💼 Cargo: <b>{cargo.upper()}</b></p>", unsafe_allow_html=True)
-        
-        if st.button("🚪 Sair / Desconectar", key="btn_logout"):
-            st.session_state['autenticado'] = False
-            st.session_state['usuario_logado'] = None
-            st.session_state['cargo_logado'] = None
-            st.rerun()
-            
+        st.markdown(f"👤 <b>{st.session_state['usuario_logado'].upper()}</b> ({cargo.upper()})", unsafe_allow_html=True)
+        if st.button("🚪 Sair / Desconectar"):
+            st.session_state['autenticado'] = False; st.rerun()
         st.markdown("---")
-        uploaded_file = st.file_uploader("📂 Carregar Excel Produção (.xlsm)", type=["xlsm"])
-        up_datas = st.file_uploader("📂 Carregar Excel DATAS (.xlsx)", type=["xlsx"])
+        uploaded_file = st.file_uploader("📂 Excel Produção (.xlsm)", type=["xlsm"])
+        up_datas = st.file_uploader("📂 Excel DATAS (.xlsx)", type=["xlsx"])
         st.markdown("---")
-        if uploaded_file:
-            menu = st.radio("NAVEGAÇÃO", abas_permitidas)
+        if uploaded_file: menu = st.radio("NAVEGAÇÃO", abas_permitidas)
         
         st.markdown("---")
-        st.markdown("### 🛡️ Zona de Segurança")
-        if st.button("📥 BAIXAR BACKUP EM EXCEL"):
+        st.sidebar.markdown("### 🛡️ Zona de Segurança")
+        if st.sidebar.button("📥 BAIXAR BACKUP EM EXCEL"):
             try:
                 engine = obter_engine()
                 df_b1 = pd.read_sql_query("SELECT * FROM reportes", engine)
@@ -421,14 +315,11 @@ else:
                     df_b3.to_excel(writer, sheet_name='Nippo_Coordenadores', index=False)
                 
                 st.download_button(
-                    label="🟢 CLIQUE PARA BAIXAR .XLSX",
-                    data=output.getvalue(),
+                    label="🟢 CLIQUE PARA BAIXAR .XLSX", data=output.getvalue(),
                     file_name=f"backup_cloud_hub_{date.today().strftime('%d_%m_%Y')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True
                 )
-            except Exception as e:
-                st.error(f"Erro ao extrair dados para backup: {e}")
+            except Exception as e: st.error(f"Erro ao extrair dados para backup: {e}")
 
     if uploaded_file:
         df_order, df_stops = load_data(file_obj=uploaded_file)
@@ -439,22 +330,18 @@ else:
         if menu == "📋 REPORTE DIÁRIO":
             st.subheader("⚙️ Filtros da Página")
             col_f1, col_f2 = st.columns(2)
-            with col_f1:
-                data_ref_reporte = st.date_input("Data de Referência", df_order['Data'].max().date())
+            with col_f1: data_ref_reporte = st.date_input("Data de Referência", df_order['Data'].max().date())
             with col_f2:
                 datas_disp = sorted(df_order['Data'].dt.date.unique().tolist(), reverse=True)
                 dias_sel = st.multiselect("Filtrar histórico:", datas_disp, default=datas_disp[:3] if len(datas_disp) >= 3 else datas_disp)
 
             st.markdown(f"## 📋 Reporte Diário de Produção - {data_ref_reporte.strftime('%d/%m/%Y')}")
-
             plan_dia, plan_mes_acum, m_total_mes, m_mtd_total = load_planner_metas_advanced(up_datas, data_ref_reporte) if up_datas else ({}, {}, 0, 0)
-
             df_acumulado_mes = df_order[(df_order['Data'].dt.month == data_ref_reporte.month) & (df_order['Data'].dt.year == data_ref_reporte.year) & (df_order['Data'].dt.date <= data_ref_reporte)]
             estoque_acum_mes = df_acumulado_mes['Peças Estoque - Ajuste'].sum()
             total_mc_mes = df_acumulado_mes['Machine Counter'].sum()
             mov_acum_mes = (df_acumulado_mes['Run Time'].sum() / df_acumulado_mes['Horário Padrão'].sum() * 100) if df_acumulado_mes['Horário Padrão'].sum() > 0 else 0
             loss_acum_mes = ((total_mc_mes - estoque_acum_mes) / total_mc_mes * 100) if total_mc_mes > 0 else 0
-            
             gap_mov = mov_acum_mes - 90.0
             gap_loss = loss_acum_mes - 2.5
 
@@ -464,30 +351,7 @@ else:
                     <div class="metric-card"><div class="metric-title">Loss Mês (Meta 2,5%)</div><div class="metric-value" style="color:#f43f5e">{loss_acum_mes:.1f}%</div><div style="font-size:0.6rem; color:{'#10b981' if gap_loss<=0 else '#f43f5e'}">{gap_loss:+.1f}% vs meta</div></div>
                     <div class="metric-card"><div class="metric-title">Estoque Realizado MTD</div><div class="metric-value">{fmt(estoque_acum_mes)}</div></div>
                 </div>
-                <div class="metric-container">
-                    <div class="metric-card"><div class="metric-title">Meta Acumulada MTD (Até {data_ref_reporte.strftime('%d/%m')})</div><div class="metric-value" style="color:#3b82f6">{fmt(m_mtd_total)}</div></div>
-                    <div class="metric-card"><div class="metric-title">Meta Geral do Mês Completo</div><div class="metric-value" style="color:#10b981">{fmt(m_total_mes)}</div></div>
-                </div>
             """, unsafe_allow_html=True)
-
-            st.markdown("<div class='section-header'>Gaps / Ganhos de Peças (Comparativo por Máquina)</div>", unsafe_allow_html=True)
-            col_t1, col_t2 = st.columns(2)
-            with col_t1:
-                st.markdown(f"**Comparativo do Dia {data_ref_reporte.strftime('%d/%m')}**")
-                df_real_dia = df_order[df_order['Data'].dt.date == data_ref_reporte].groupby('Máquina')['Peças Estoque - Ajuste'].sum().to_dict()
-                res_gap_dia = []
-                for m in sorted(df_order['Máquina'].unique(), key=int):
-                    r, p = df_real_dia.get(m, 0), plan_dia.get(m, 0)
-                    res_gap_dia.append({'Máquina': m, 'Realizado': fmt(r), 'Planejado': fmt(p), 'Gap/Ganho': fmt(r-p)})
-                st.table(pd.DataFrame(res_gap_dia))
-            with col_t2:
-                st.markdown(f"**Acumulado Mês (MTD) até {data_ref_reporte.strftime('%d/%m')}**")
-                df_real_mes = df_acumulado_mes.groupby('Máquina')['Peças Estoque - Ajuste'].sum().to_dict()
-                res_gap_mes = []
-                for m in sorted(df_order['Máquina'].unique(), key=int):
-                    r, p = df_real_mes.get(m, 0), plan_mes_acum.get(m, 0)
-                    res_gap_mes.append({'Máquina': m, 'Realizado MTD': fmt(r), 'Planejado MTD': fmt(p), 'Gap/Ganho MTD': fmt(r-p)})
-                st.table(pd.DataFrame(res_gap_mes))
 
             for dia in dias_sel:
                 st.markdown(f"<div class='section-header'>DETALHAMENTO POR MÁQUINA - {dia.strftime('%d/%m/%Y')}</div>", unsafe_allow_html=True)
@@ -549,68 +413,68 @@ else:
             st.markdown(html_grid + '</div>', unsafe_allow_html=True)
 
         # =========================================================
-    # ABA: ANÁLISE SEMANAL
-    # =========================================================
-    elif menu == "📋 ANÁLISE SEMANAL":
-        st.sidebar.subheader("Filtros Board")
-        maq_b = st.sidebar.selectbox("Máquina", sorted(df_order['Máquina'].unique()))
-        turno_b = st.sidebar.multiselect("Turnos", sorted(df_order['Turno'].unique()), default=sorted(df_order['Turno'].unique()), key='tb')
-        periodo_b = st.sidebar.date_input("Período", [df_order['Data'].max() - timedelta(days=7), df_order['Data'].max()])
-        
-        df_b_all = df_order[(df_order['Data'].dt.date >= periodo_b[0]) & (df_order['Data'].dt.date <= periodo_b[1]) & (df_order['Turno'].isin(turno_b))]
-        df_b = df_b_all[df_b_all['Máquina'] == maq_b]
-        df_sb = df_stops[(df_stops['Data'].dt.date >= periodo_b[0]) & (df_stops['Data'].dt.date <= periodo_b[1]) & (df_stops['Máquina'] == maq_b) & (df_stops['Turno'].isin(turno_b))]
+        # 🟢 RESTAURAÇÃO COMPLETA DE SUA ABA: ANÁLISE SEMANAL ORIGINAL
+        # =========================================================
+        elif menu == "📋 ANÁLISE SEMANAL":
+            st.sidebar.subheader("Filtros Board")
+            maq_b = st.sidebar.selectbox("Máquina", sorted(df_order['Máquina'].unique()))
+            turno_b = st.sidebar.multiselect("Turnos", sorted(df_order['Turno'].unique()), default=sorted(df_order['Turno'].unique()), key='tb')
+            periodo_b = st.sidebar.date_input("Período", [df_order['Data'].max() - timedelta(days=7), df_order['Data'].max()])
+            
+            df_b_all = df_order[(df_order['Data'].dt.date >= periodo_b[0]) & (df_order['Data'].dt.date <= periodo_b[1]) & (df_order['Turno'].isin(turno_b))]
+            df_b = df_b_all[df_b_all['Máquina'] == maq_b]
+            df_sb = df_stops[(df_stops['Data'].dt.date >= periodo_b[0]) & (df_stops['Data'].dt.date <= periodo_b[1]) & (df_stops['Máquina'] == maq_b) & (df_stops['Turno'].isin(turno_b))]
 
-        str_turnos = ", ".join(turno_b) if turno_b else "Nenhum"
-        st.markdown(f"""<div style="text-align:center; border-bottom:3px solid #10b981; padding-bottom:10px; margin-bottom:15px;">
-            <h1 style="color:#0f172a; margin:0;">RELATÓRIO SEMANAL DE PERFORMANCE - MÁQUINA {maq_b}</h1>
-            <h3 style="color:#10b981; margin:0;">TURNO(S): {str_turnos}</h3>
-            <p style="color:#64748b; font-size:1rem;">Período: {periodo_b[0].strftime('%d/%m')} a {periodo_b[1].strftime('%d/%m/%Y')}</p></div>""", unsafe_allow_html=True)
+            str_turnos = ", ".join(turno_b) if turno_b else "Nenhum"
+            st.markdown(f"""<div style="text-align:center; border-bottom:3px solid #10b981; padding-bottom:10px; margin-bottom:15px;">
+                <h1 style="color:#0f172a; margin:0;">RELATÓRIO SEMANAL DE PERFORMANCE - MÁQUINA {maq_b}</h1>
+                <h3 style="color:#10b981; margin:0;">TURNO(S): {str_turnos}</h3>
+                <p style="color:#64748b; font-size:1rem;">Período: {periodo_b[0].strftime('%d/%m')} a {periodo_b[1].strftime('%d/%m/%Y')}</p></div>""", unsafe_allow_html=True)
 
-        m_v = (df_b["Run Time"].sum()/df_b["Horário Padrão"].replace(0,1).sum()*100)
-        l_v = ((df_b["Machine Counter"].sum()-df_b["Peças Estoque - Ajuste"].sum())/df_b["Machine Counter"].replace(0,1).sum()*100)
-        pecas_v = df_b["Peças Estoque - Ajuste"].sum()
+            m_v = (df_b["Run Time"].sum()/df_b["Horário Padrão"].replace(0,1).sum()*100) if not df_b.empty else 0
+            l_v = ((df_b["Machine Counter"].sum()-df_b["Peças Estoque - Ajuste"].sum())/df_b["Machine Counter"].replace(0,1).sum()*100) if not df_b.empty else 0
+            pecas_v = df_b["Peças Estoque - Ajuste"].sum() if not df_b.empty else 0
 
-        v1, v2, v3 = st.columns([1, 1, 1])
-        with v1: st.plotly_chart(mini_gauge("Movimentação", m_v, "#10b981", 85, 180), use_container_width=True)
-        with v2: st.plotly_chart(mini_gauge("Loss", l_v, "#e74c3c", 5, 180), use_container_width=True)
-        with v3: st.markdown(f'<div class="metric-card" style="height:150px;"><div class="metric-title">Peças Enviadas</div><div class="metric-value" style="font-size:1.8rem;">{fmt(pecas_v)}</div></div>', unsafe_allow_html=True)
+            v1, v2, v3 = st.columns([1, 1, 1])
+            with v1: st.plotly_chart(mini_gauge("Movimentação", m_v, "#10b981", 85, 180), use_container_width=True)
+            with v2: st.plotly_chart(mini_gauge("Loss", l_v, "#e74c3c", 5, 180), use_container_width=True)
+            with v3: st.markdown(f'<div class="metric-card" style="height:150px;"><div class="metric-title">Peças Enviadas</div><div class="metric-value" style="font-size:1.8rem;">{fmt(pecas_v)}</div></div>', unsafe_allow_html=True)
 
-        rank_df = df_b_all.groupby('Máquina').agg({'Run Time':'sum','Horário Padrão':'sum'}).reset_index()
-        rank_df['Mov %'] = (rank_df['Run Time'] / rank_df['Horário Padrão'].replace(0,1) * 100).round(1)
-        rank_df = rank_df.sort_values('Mov %', ascending=False).reset_index(drop=True)
-        rank_df.index += 1
-        
-        check_maq = rank_df[rank_df['Máquina'] == maq_b]
-        if not check_maq.empty:
-            posicao = check_maq.index[0]
-            total_maqs = len(rank_df)
-            if posicao <= 2:
-                msg, col = ("🏆 Excelente performance.", "#dcfce7")
-            else:
-                msg, col = ("🚀 Foco na melhoria para subir o ranking semanal!", "#fee2e2")
-            st.markdown(f'<div class="feedback-box" style="background:{col}; color:black; border-left:5px solid #10b981;">{msg}</div>', unsafe_allow_html=True)
+            rank_df = df_b_all.groupby('Máquina').agg({'Run Time':'sum','Horário Padrão':'sum'}).reset_index()
+            rank_df['Mov %'] = (rank_df['Run Time'] / rank_df['Horário Padrão'].replace(0,1) * 100).round(1)
+            rank_df = rank_df.sort_values('Mov %', ascending=False).reset_index(drop=True)
+            rank_df.index += 1
+            
+            check_maq = rank_df[rank_df['Máquina'] == maq_b]
+            if not check_maq.empty:
+                posicao = check_maq.index[0]
+                total_maqs = len(rank_df)
+                if posicao <= 2:
+                    msg, col = ("🏆 Excelente performance.", "#dcfce7")
+                else:
+                    msg, col = ("🚀 Foco na melhoria para subir o ranking semanal!", "#fee2e2")
+                st.markdown(f'<div class="feedback-box" style="background:{col}; color:black; border-left:5px solid #10b981;">{msg}</div>', unsafe_allow_html=True)
 
-        col_g, col_r = st.columns([2, 1])
-        with col_g:
-            st.markdown("🛑 *Impacto das Paradas (Piores 5)*")
-            stop_data = df_sb.groupby('Problema')['Minutos'].sum().sort_values(ascending=True).tail(5)
-            st.plotly_chart(px.bar(stop_data, orientation='h', text_auto=True, color_discrete_sequence=['#10b981']).update_layout(height=300, paper_bgcolor='white', plot_bgcolor='white', font={'color':'black'}), use_container_width=True)
-            pior_p = stop_data.index[-1] if not stop_data.empty else "Nenhuma Parada"
+            col_g, col_r = st.columns([2, 1])
+            with col_g:
+                st.markdown("🛑 *Impacto das Paradas (Piores 5)*")
+                stop_data = df_sb.groupby('Problema')['Minutos'].sum().sort_values(ascending=True).tail(5)
+                st.plotly_chart(px.bar(stop_data, orientation='h', text_auto=True, color_discrete_sequence=['#10b981']).update_layout(height=300, paper_bgcolor='white', plot_bgcolor='white', font={'color':'black'}), use_container_width=True)
+                pior_p = stop_data.index[-1] if not stop_data.empty else "Nenhuma Parada"
 
-        with col_r:
-            st.markdown("🏆 *Ranking Movimentação*")
-            for i, r in rank_df.iterrows():
-                style = "class='highlight-rank'" if r['Máquina'] == maq_b else ""
-                st.markdown(f"<div {style}>{i}º - MÁQ {r['Máquina']}: {r['Mov %']}%</div>", unsafe_allow_html=True)
+            with col_r:
+                st.markdown("🏆 *Ranking Movimentação*")
+                for i, r in rank_df.iterrows():
+                    style = "class='highlight-rank'" if r['Máquina'] == maq_b else ""
+                    st.markdown(f"<div {style}>{i}º - MÁQ {r['Máquina']}: {r['Mov %']}%</div>", unsafe_allow_html=True)
 
-        st.markdown(f"""<div class="five-why-box"><h3 style="color:#059669; margin:0;">ANÁLISE 5 PORQUÊS: {pior_p}</h3>
-            1. Por que? <div class="five-why-line"></div> 2. Por que? <div class="five-why-line"></div> 3. Por que? <div class="five-why-line"></div> 
-            4. Por que? <div class="five-why-line"></div> 5. Por que? <div class="five-why-line"></div>
-            <b>CAUSA RAIZ / PLANO DE AÇÃO:</b> <div class="five-why-line"></div><div class="five-why-line"></div></div>""", unsafe_allow_html=True)
+            st.markdown(f"""<div class="five-why-box"><h3 style="color:#059669; margin:0;">ANÁLISE 5 PORQUÊS: {pior_p}</h3>
+                1. Por que? <div class="five-why-line"></div> 2. Por que? <div class="five-why-line"></div> 3. Por que? <div class="five-why-line"></div> 
+                4. Por que? <div class="five-why-line"></div> 5. Por que? <div class="five-why-line"></div>
+                <b>CAUSA RAIZ / PLANO DE AÇÃO:</b> <div class="five-why-line"></div><div class="five-why-line"></div></div>""", unsafe_allow_html=True)
 
         # =========================================================
-        # MODIFICAÇÃO 1: 📝 LANÇAR REPORTE (AGORA COM MULTI-AÇÕES VIA DATA_EDITOR)
+        # 📝 LANÇAR REPORTE (DINÂMICO - MULTI AÇÕES ATIVADO)
         # =========================================================
         elif menu == "📝 LANÇAR REPORTE":
             st.markdown("## 📝 Lançar Reporte de Turno")
@@ -633,12 +497,11 @@ else:
                 p4 = st.text_input("Por que 4?")
                 p5 = st.text_input("Por que 5? (Causa Raiz)")
                 
-                # 📊 NOVA INTERFACE DE MATRIZ DE AÇÕES REIVINDICADA (MÚLTIPLAS LINHAS)
-                st.markdown("<div class='section-header'>3. Plano de Ação Imediato Coletivo (Matriz Dinâmica)</div>", unsafe_allow_html=True)
+                st.markdown("<div class='section-header'>3. Matriz Interativa de Ações (Adicione quantas linhas precisar)</div>", unsafe_allow_html=True)
                 st.caption("💡 Adicione quantas linhas precisar utilizando o botão '+' abaixo da tabela. Deixe em branco para ignorar uma linha.")
                 
                 df_estrutura_acoes = pd.DataFrame(columns=["O quê (Ações)", "Quem (Responsável)", "Quando (Prazo)", "Status Inicial"])
-                df_estrutura_acoes.loc[0] = ["", "", "", "Pendente"] # Linha guia inicial
+                df_estrutura_acoes.loc[0] = ["", "", "", "Pendente"]
                 
                 tabela_dinamica_acoes = st.data_editor(
                     df_estrutura_acoes, num_rows="dynamic",
@@ -649,14 +512,12 @@ else:
                 )
                 
                 submit = st.form_submit_button("💾 SALVAR REPORTE NO BANCO DE DADOS")
-                
                 if submit:
                     if not coord_rep or not prob_an: 
                         st.error("Por favor, preencha os campos essenciais (Coordenador e Problema Foco).")
                     else:
                         engine = obter_engine()
                         with engine.begin() as conn:
-                            # Grava o bloco pai (Reporte) e extrai o ID gerado
                             result = conn.execute(text("""
                                 INSERT INTO reportes (data_registro, turno, coordenador, ocorrencias, maq_analisada, problema, pq1, pq2, pq3, pq4, pq5) 
                                 VALUES (:data, :turno, :coord, :ocorrencias, :maq, :prob, :p1, :p2, :p3, :p4, :p5) RETURNING id
@@ -664,20 +525,19 @@ else:
                             
                             reporte_id = result.fetchone()[0]
                             
-                            # Varre a tabela dinâmica gravando as N ações associadas ao ID pai
-                            qtd_acoes_salvas = 0
+                            qtd_salva = 0
                             for _, row in tabela_dinamica_acoes.iterrows():
                                 if str(row["O quê (Ações)"]).strip() != "":
                                     conn.execute(text("""
                                         INSERT INTO acoes_reportes (reporte_id, oque, quem, quando, status) 
                                         VALUES (:reporte_id, :oque, :quem, :quando, :status)
                                     """), {"reporte_id": reporte_id, "oque": row["O quê (Ações)"], "quem": str(row["Quem (Responsável)"]).upper(), "quando": row["Quando (Prazo)"], "status": row["Status Inicial"]})
-                                    qtd_acoes_salvas += 1
+                                    qtd_salva += 1
                                     
-                        st.success(f"🎉 Reporte alocado com sucesso! {qtd_acoes_salvas} ações foram vinculadas à base de dados.")
+                        st.success(f"🎉 Reporte alocado com sucesso! {qtd_salva} ações foram vinculadas à base de dados.")
 
         # =========================================================
-        # MODIFICAÇÃO 2: 📊 ACOMPANHAMENTO (VISUALIZAÇÃO DE TODAS AS AÇÕES RELACIONADAS)
+        # 📊 ABA: ACOMPANHAMENTO (MULTI AÇÕES RELACIONADAS)
         # =========================================================
         elif menu == "📊 ACOMPANHAMENTO":
             st.markdown("## 📊 Painel de Acompanhamento de Ações Coletivas")
@@ -694,7 +554,6 @@ else:
                 id_selecionado = st.number_input("Digite o ID do reporte para auditar todas as ações vinculadas:", min_value=1, step=1)
                 
                 if id_selecionado in df_db['id'].values:
-                    # Carrega dinamicamente a sub-tabela com todas as ações pertencentes ao ID pai selecionado
                     df_acoes_reais = pd.read_sql_query(text("""
                         SELECT id, oque as "O quê (Ações)", quem as "Quem (Responsável)", quando as "Quando (Prazo)", status as "Status" 
                         FROM acoes_reportes WHERE reporte_id = :id
@@ -702,7 +561,6 @@ else:
                     
                     st.markdown(f"#### 📋 Matriz de Planos Vinculados ao ID #{id_selecionado}")
                     
-                    # Permite monitorar e atualizar os status de cada ação na hora
                     tabela_edicao_flow = st.data_editor(
                         df_acoes_reais, num_rows="dynamic",
                         column_config={"Status": st.column_config.SelectboxColumn("Status", options=["Pendente", "Em Andamento", "Resolvido"], required=True)},
@@ -713,7 +571,6 @@ else:
                     with col_act1:
                         if st.button("💾 ATUALIZAR STATUS DAS AÇÕES COLETIVAS"):
                             with engine.begin() as conn:
-                                # Regrava o bloco para atualizar modificações ou novas linhas inseridas pelo gestor
                                 conn.execute(text("DELETE FROM acoes_reportes WHERE reporte_id = :id"), {"id": int(id_selecionado)})
                                 for _, r in tabela_edicao_flow.iterrows():
                                     if str(r["O quê (Ações)"]).strip() != "":
@@ -729,7 +586,7 @@ else:
                             st.warning("O reporte pai e todas as suas ações secundárias foram deletados."); st.rerun()
 
         # =========================================================
-        # MODIFICAÇÃO 3: 📝 LANÇAR ANÁLISE SEMANAL (MULTI-AÇÕES ATIVADO)
+        # 📝 LANÇAR ANÁLISE SEMANAL (DINÂMICO - MULTI AÇÕES)
         # =========================================================
         elif menu == "📝 LANÇAR ANÁLISE SEMANAL":
             st.markdown("## 📝 Formulário de Lançamento — Análise Semanal (Operadores)")
@@ -747,7 +604,6 @@ else:
                 spq4 = st.text_input("4º Por que?")
                 spq5 = st.text_input("5º Por que? (Causa Raiz)")
                 
-                # 📊 ADICIONADO DATA_EDITOR TAMBÉM NA ABA SEMANAL CONFORME SOLICITADO
                 st.markdown("<div class='section-header'>Plano de Ações Semanais Combinadas (Matriz Coletiva)</div>", unsafe_allow_html=True)
                 df_estrutura_sem = pd.DataFrame(columns=["O quê (Ação Semanal)", "Quem (Responsável)", "Quando (Prazo)", "Status"])
                 df_estrutura_sem.loc[0] = ["", "", "", "Pendente"]
@@ -784,24 +640,23 @@ else:
                         st.success(f"🎉 Análise semanal alocada com sucesso com {qtd_sem_salva} blocos de ações correlacionados.")
 
         # =========================================================
-        # MODIFICAÇÃO 4: 📋 ACOMP. ANÁLISES SEMANAIS (MULTI-AÇÕES EXIBIDAS CORRETAMENTE)
+        # 📋 ACOMP. ANÁLISES SEMANAIS (GERENCIADOR DE MÚLTIPLAS AÇÕES)
         # =========================================================
         elif menu == "📋 ACOMP. ANÁLISES SEMANAIS":
             st.markdown("## 📋 Acompanhamento Técnico — Análises dos Operadores")
             engine = obter_engine()
-            df_db_sem = pd.read_sql_query("SELECT id, data_registro, turno, maquina, pior_parada, causa_raiz FROM analises_semanais ORDER BY id DESC", engine)
+            df_as = pd.read_sql_query("SELECT id, data_registro, turno, maquina, pior_parada, causa_raiz FROM analises_semanais ORDER BY id DESC", engine)
             
-            if df_db_sem.empty: 
+            if df_as.empty: 
                 st.info("Nenhuma análise semanal registrada no banco remoto.")
             else:
                 st.markdown("### 📌 Registro Histórico Semanal")
-                st.dataframe(df_db_sem, use_container_width=True)
+                st.dataframe(df_as, use_container_width=True)
                 
                 st.markdown("<div class='section-header'>✏️ Central de Gerenciamento da Análise Semanal</div>", unsafe_allow_html=True)
                 id_sel_sem = st.number_input("Digite o ID da Análise Semanal para gerenciar e monitorar as ações:", min_value=1, step=1, key='id_num_sem')
                 
-                if id_sel_sem in df_db_sem['id'].values:
-                    # Puxa todas as ações filhas pertencentes a esse ID semanal
+                if id_sel_sem in df_as['id'].values:
                     df_acoes_sem_reais = pd.read_sql_query(text("""
                         SELECT id, oque as "O quê (Ação Semanal)", quem as "Quem (Responsável)", quando as "Quando (Prazo)", status as "Status" 
                         FROM acoes_semanais WHERE analise_id = :id
@@ -828,13 +683,13 @@ else:
                                         """), {"analise_id": int(id_sel_sem), "oque": r["O quê (Ação Semanal)"], "quem": str(r["Quem (Responsável)"]).upper(), "quando": r["Quando (Prazo)"], "status": r["Status"]})
                             st.success("🎉 Matriz analítica semanal atualizada com sucesso!"); st.rerun()
                     with btn_col2:
-                        if st.button("❌ DELETAR BLOCO COMPLETO SEMANAL", type="primary", use_container_width=True):
+                        if st.button("❌ DELETAR ANÁLISE SEMANAL DO BANCO", type="primary", use_container_width=True):
                             with engine.begin() as conn: 
                                 conn.execute(text("DELETE FROM analises_semanais WHERE id = :id"), {"id": int(id_sel_sem)})
                             st.warning("Histórico semanal removido completamente."); st.rerun()
 
         # =========================================================
-        # ABA: APRESENTAÇÃO SEMANAL (EXIBIÇÃO COM MÚLTIPLAS AÇÕES)
+        # 📊 ABA: APRESENTAÇÃO SEMANAL
         # =========================================================
         elif menu == "📊 APRESENTAÇÃO SEMANAL":
             st.markdown("<h2 style='text-align:center;'>📊 Painel de Apresentação Semanal Integrada</h2>")
@@ -863,7 +718,6 @@ else:
                 st.warning("⚠️ Nenhuma análise estruturada cadastrada para esta máquina/turno no Neon SQL.")
             else:
                 d_f = df_query_db.iloc[0]
-                # Coleta todas as ações filhas para plotar no slide técnico da reunião
                 df_list_ac = pd.read_sql_query(text("SELECT oque as \"Ação Cadastrada\", quem as \"Responsável\", quando as \"Prazo\", status as \"Status\" FROM acoes_semanais WHERE analise_id = :id"), engine, params={"id": int(d_f['id'])})
                 
                 st.markdown(f"""
