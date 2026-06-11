@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 import calendar
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import sqlite3
 
 # 1. CONFIGURAÇÃO DA PÁGINA
@@ -43,7 +43,7 @@ def init_db():
             status TEXT
         )
     """)
-    # Tabela 2: Novas Análises Semanais dos Operadores
+    # Tabela 2: Análises Semanais dos Operadores
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS analises_semanais (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,10 +59,29 @@ def init_db():
             status TEXT
         )
     """)
+    # Tabela 3: Nova Tabela Nippo Coordenadores (Troca de Turno por Máquina)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS nippo_coordenadores (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            data TEXT,
+            turno TEXT,
+            coordenador TEXT,
+            tecnico TEXT,
+            maquina TEXT,
+            itens_compartilhar TEXT,
+            produtividade REAL,
+            loss REAL,
+            sku TEXT,
+            palete_inicial TEXT,
+            palete_final TEXT,
+            total_ordem INTEGER,
+            data_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
     conn.commit()
     conn.close()
 
-# Inicializa o banco de dados local
+# Inicializa o banco de dados local com todas as tabelas estruturadas
 init_db()
 
 # --- FUNÇÃO AUXILIAR DE FORMATAÇÃO (Milhares com ponto) ---
@@ -254,7 +273,8 @@ with st.sidebar:
             "📊 ACOMPANHAMENTO",
             "📝 LANÇAR ANÁLISE SEMANAL", 
             "📋 ACOMP. ANÁLISES SEMANAIS", 
-            "📊 APRESENTAÇÃO SEMANAL"
+            "📊 APRESENTAÇÃO SEMANAL",
+            "📋 NIPPO COORDENADORES"      # Nova aba inserida no escopo do rádio
         ])
 
 if uploaded_file:
@@ -710,7 +730,7 @@ if uploaded_file:
                             """, (es_pior, es_status, es_maq, ep1, ep2, ep3, ep4, ep5, ep5, e_oque, e_quem, e_quando, int(id_sel_sem)))
                             conn.commit(); conn.close()
                             st.session_state['mostrar_edicao_semanal'] = False
-                            st.success("🎉 Dados updated!")
+                            st.success("🎉 Dados atualizados!")
                             st.rerun()
                     with btn_col2:
                         if st.button("❌ DELETAR ANÁLISE SEMANAL", type="primary", use_container_width=True):
@@ -723,7 +743,7 @@ if uploaded_file:
                             st.rerun()
 
     # =========================================================
-    # ABA: APRESENTAÇÃO SEMANAL (CORREÇÃO DE ESCOPO DE SELEÇÃO POR DATA)
+    # ABA: APRESENTAÇÃO SEMANAL
     # =========================================================
     elif menu == "📊 APRESENTAÇÃO SEMANAL":
         st.markdown("<h2 style='text-align:center;'>📊 Reunião Geral de Fechamento & Apresentação Semanal</h2>", unsafe_allow_html=True)
@@ -752,7 +772,6 @@ if uploaded_file:
         with c_kpi2: st.plotly_chart(mini_gauge("Loss Semanal", loss_sem, "#e74c3c", 5, 140), use_container_width=True)
         with c_kpi3: st.markdown(f'<div class="metric-card" style="height:110px;"><div class="metric-title">Volume Realizado Semanal</div><div class="metric-value" style="font-size:1.8rem; margin-top:10px;">{fmt(pecas_sem)}</div></div>', unsafe_allow_html=True)
         
-        # FIX: Consulta SQL modificada para filtrar obrigatoriamente a data_registro entre o range do periodo_ap da tela
         conn = sqlite3.connect('reportes_turno.db')
         df_query_db = pd.read_sql_query("""
             SELECT * FROM analises_semanais 
@@ -805,5 +824,112 @@ if uploaded_file:
                     </div>
                 </div>
             """, unsafe_allow_html=True)
+
+    # =========================================================
+    # NOVA ABA EXCLUSIVA: 📋 NIPPO COORDENADORES (TROCA DE TURNO)
+    # =========================================================
+    elif menu == "📋 NIPPO COORDENADORES":
+        st.markdown("## 📋 Nippo Coordenadores — Troca de Turno Operacional")
+        
+        # Criação interna das duas sub-abas (Lançar e Consultar)
+        aba_lancar, aba_consultar = st.tabs(["📝 Lançar Fechamento", "🔍 Histórico por Máquina"])
+        
+        with aba_lancar:
+            st.subheader("Informações Gerais do Turno")
+            col_n1, col_n2 = st.columns(2)
+            with col_n1:
+                data_nippo = st.date_input("Data do Nippo", date.today())
+                coordenador_nippo = st.text_input("Nome do Coordenador", placeholder="Ex: DANILO").upper()
+            with col_n2:
+                turno_nippo = st.selectbox("Selecione o Turno do Nippo", ["1º Turno", "2º Turno", "3º Turno"], index=2)
+                tecnico_nippo = st.text_input("Nome do Técnico Responsável", placeholder="Ex: KANIGIA").upper()
+            
+            st.markdown("<div class='section-header'>Lançamento Individual por Máquina (M1 a M7)</div>", unsafe_allow_html=True)
+            
+            maquinas_lista = [f"M{i}" for i in range(1, 8)]
+            mapa_inputs_maquinas = {}
+            
+            # Geração dinâmica dos formulários colapsáveis de M1 a M7
+            for m_item in maquinas_lista:
+                with st.expander(f"⚙️ Reporte de Campo — Máquina: {m_item}", expanded=True):
+                    col_b1, col_b2, col_b3 = st.columns([2, 1, 1])
+                    
+                    with col_b1:
+                        txt_compartilhar = st.text_area(f"Itens a compartilhar / Ocorrências ({m_item})", key=f"txt_nippo_{m_item}", height=90)
+                    with col_b2:
+                        sku_maq = st.text_input(f"SKU Atual ({m_item})", key=f"sku_nippo_{m_item}").upper()
+                        prod_maq = st.number_input(f"Produtividade % ({m_item})", min_value=0.0, max_value=100.0, step=0.1, key=f"prod_nippo_{m_item}")
+                        loss_maq = st.number_input(f"Loss % ({m_item})", min_value=0.0, max_value=100.0, step=0.1, key=f"loss_nippo_{m_item}")
+                    with col_b3:
+                        pal_ini_maq = st.text_input(f"Palete Inicial ({m_item})", key=f"pal_ini_nippo_{m_item}").upper()
+                        pal_fim_maq = st.text_input(f"Palete Final ({m_item})", key=f"pal_fim_nippo_{m_item}").upper()
+                        tot_ordem_maq = st.number_input(f"Total da Ordem ({m_item})", min_value=0, step=1, key=f"tot_nippo_{m_item}")
+                        
+                    mapa_inputs_maquinas[m_item] = {
+                        "itens": txt_compartilhar, "sku": sku_maq, "prod": prod_maq,
+                        "loss": loss_maq, "pal_ini": pal_ini_maq, "pal_fim": pal_fim_maq, "tot": tot_ordem_maq
+                    }
+            
+            if st.button("💾 GRAVAR REPORTE NIPPO NO BANCO", type="primary", use_container_width=True):
+                if not coordenador_nippo or not tecnico_nippo:
+                    st.error("Não é possível salvar. Os campos Coordenador e Técnico são obrigatórios.")
+                else:
+                    conn = sqlite3.connect('reportes_turno.db')
+                    cursor = conn.cursor()
+                    try:
+                        # Varre o dicionário e salva as 7 linhas (uma para cada máquina)
+                        for m_item, dados in mapa_inputs_maquinas.items():
+                            cursor.execute("""
+                                INSERT INTO nippo_coordenadores 
+                                (data, turno, coordenador, tecnico, maquina, itens_compartilhar, produtividade, loss, sku, palete_inicial, palete_final, total_ordem)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """, (
+                                str(data_nippo), turno_nippo, coordenador_nippo, tecnico_nippo, m_item,
+                                dados["itens"], dados["prod"], dados["loss"], dados["sku"], dados["pal_ini"], dados["pal_fim"], int(dados["tot"])
+                            ))
+                        conn.commit()
+                        st.success(f"🎉 O Nippo completo do {turno_nippo} foi alocado com sucesso no banco de dados!")
+                    except Exception as error:
+                        st.error(f"Falha operacional na gravação das linhas: {error}")
+                    finally:
+                        conn.close()
+                        
+        with aba_consultar:
+            st.subheader("🔍 Filtros de Pesquisa Histórica")
+            c_f1, c_f2, c_f3 = st.columns(3)
+            with c_f1:
+                query_data = st.date_input("Filtrar Data Específica", date.today(), key="q_data")
+            with c_f2:
+                query_turno = st.selectbox("Filtrar Turno Específico", ["Todos", "1º Turno", "2º Turno", "3º Turno"], index=0)
+            with c_f3:
+                query_maq = st.selectbox("Filtrar Máquina Foco", ["Todas", "M1", "M2", "M3", "M4", "M5", "M6", "M7"], index=0)
+                
+            conn = sqlite3.connect('reportes_turno.db')
+            sql_txt = "SELECT data, turno, coordenador, tecnico, maquina, itens_compartilhar, sku, produtividade, loss, palete_inicial, palete_final, total_ordem FROM nippo_coordenadores WHERE data = ?"
+            parametros_filtro = [str(query_data)]
+            
+            if query_turno != "Todos":
+                sql_txt += " AND turno = ?"
+                parametros_filtro.append(query_turno)
+            if query_maq != "Todas":
+                sql_txt += " AND maquina = ?"
+                parametros_filtro.append(query_maq)
+                
+            df_nippo_res = pd.read_sql_query(sql_txt, conn, params=parametros_filtro)
+            conn.close()
+            
+            if df_nippo_res.empty:
+                st.warning(f"Nenhum diário Nippo encontrado para o dia {query_data.strftime('%d/%m/%Y')}.")
+            else:
+                # Exibição organizada dos dados estruturados
+                st.dataframe(df_nippo_res, use_container_width=True)
+                
+                st.markdown("<div class='section-header'>📝 Detalhamento de Itens Compartilhados no Turno</div>", unsafe_allow_html=True)
+                for _, linha in df_nippo_res.iterrows():
+                    # Só renderiza caixas se houver registro de texto para a máquina
+                    if str(linha['itens_compartilhar']).strip():
+                        st.markdown(f"🔹 **{linha['maquina']} — SKU: {linha['sku']}** (Turno: {linha['turno']} | Coordenador: {linha['coordenador']} | Técnico: {linha['tecnico']})")
+                        st.info(linha['itens_compartilhar'])
+
 else:
-    st.info("💡 Por favor, carregue os arquivos Excel para iniciar.")
+    st.info("💡 Por favor, carregue os arquivos Excel para iniciar o Analytics Hub.")
