@@ -276,8 +276,10 @@ if uploaded_file:
             st.markdown(f"<div class='section-header'>DETALHAMENTO POR MÁQUINA - {dia.strftime('%d/%m/%Y')}</div>", unsafe_allow_html=True)
             df_dia = df_order[df_order['Data'].dt.date == dia]
             res = df_dia.groupby(['Categoria', 'Máquina']).agg({'Run Time':'sum','Horário Padrão':'sum','Machine Counter':'sum','Peças Estoque - Ajuste':'sum'}).reset_index()
+            
             res['Movimentação %'] = (res['Run Time'] / res['Horário Padrão'].replace(0,1) * 100).apply(lambda x: f"{x:.2f}%".replace('.', ','))
             res['Perda %'] = ((res['Machine Counter'] - res['Peças Estoque - Ajuste']) / res['Machine Counter'].replace(0,1) * 100).apply(lambda x: f"{x:.2f}%".replace('.', ','))
+            
             res['Peças Estoque'] = res['Peças Estoque - Ajuste'].apply(fmt)
             st.table(res[['Categoria','Máquina','Movimentação %','Perda %','Peças Estoque']])
 
@@ -460,7 +462,7 @@ if uploaded_file:
                     st.success("🎉 Reporte alocado e registrado com sucesso no banco de dados local!")
 
     # =========================================================
-    # ABA: ACOMPANHAMENTO (COM OPÇÃO DE ATUALIZAR E EXCLUIR)
+    # ABA: ACOMPANHAMENTO (COM COLORIZAÇÃO DAS LINHAS SOLICITADA)
     # =========================================================
     elif menu == "📊 ACOMPANHAMENTO":
         st.markdown("## 📊 Painel de Acompanhamento de Ações")
@@ -474,8 +476,22 @@ if uploaded_file:
             f_col1, f_col2 = st.columns(2)
             with f_col1: filtro_status = st.multiselect("Filtrar por Status", df_db['status'].unique(), default=df_db['status'].unique())
             with f_col2: filtro_turno = st.multiselect("Filtrar por Turno", df_db['turno'].unique(), default=df_db['turno'].unique())
-            df_filtrado_db = df_db[(df_db['status'].isin(filtro_status)) & (df_db['turno'].isin(filtro_turno))]
-            st.dataframe(df_filtrado_db[['id', 'data_registro', 'turno', 'coordenador', 'maq_analisada', 'problema', 'quem', 'quando', 'status']], use_container_width=True)
+            df_filtrado_db = df_db[(df_db['status'].isin(filtro_status)) & (df_db['turno'].isin(filtro_turno))].copy()
+            
+            # ALTERAÇÃO: Função interna para colorização dinâmica das linhas com base no Status
+            def colorir_linhas_por_status(row):
+                if row['status'] == 'Pendente':
+                    return ['background-color: #fee2e2; color: #b91c1c; font-weight: 600'] * len(row) # Vermelho Suave
+                elif row['status'] == 'Em Andamento':
+                    return ['background-color: #fef3c7; color: #d97706; font-weight: 600'] * len(row) # Amarelo Suave
+                elif row['status'] == 'Resolvido':
+                    return ['background-color: #dcfce7; color: #15803d; font-weight: 600'] * len(row) # Verde Suave
+                return [''] * len(row)
+
+            cols_exibicao = ['id', 'data_registro', 'turno', 'coordenador', 'maq_analisada', 'problema', 'quem', 'quando', 'status']
+            
+            # Renderiza o dataframe aplicando o estilo de cores
+            st.dataframe(df_filtrado_db[cols_exibicao].style.apply(colorir_linhas_por_status, axis=1), use_container_width=True)
             
             st.markdown("<div class='section-header'>Gerenciar Reporte Existente</div>", unsafe_allow_html=True)
             id_selecionado = st.number_input("Digite o ID do reporte para gerenciar:", min_value=1, step=1)
@@ -496,9 +512,8 @@ if uploaded_file:
                         st.success(f"Status do ID {id_selecionado} alterado para {novo_status}!")
                         st.rerun()
                 
-                # RECURSO ADICIONADO: Botão de exclusão definitiva do registro
                 with col_btn2:
-                    st.write("### EXCLUSÃO DO REPORTE")
+                    st.write("### Zona de Perigo")
                     if st.button("❌ EXCLUIR REPORTE DEFINITIVAMENTE", type="primary"):
                         conn = sqlite3.connect('reportes_turno.db')
                         cursor = conn.cursor()
