@@ -513,7 +513,7 @@ if uploaded_file:
                         st.rerun()
                 
                 with col_btn2:
-                    st.write("### Zona de Perigo")
+                    st.write("### EXCLUSÃO DO REPORTE")
                     if st.button("❌ EXCLUIR REPORTE DEFINITIVAMENTE", type="primary"):
                         conn = sqlite3.connect('reportes_turno.db')
                         cursor = conn.cursor()
