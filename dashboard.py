@@ -413,7 +413,7 @@ if uploaded_file:
         st.markdown(html_grid + '</div>', unsafe_allow_html=True)
 
     # =========================================================
-    # ABA: ANÁLISE SEMANAL (PADRÃO OPERADOR)
+    # ABA: ANÁLISE SEMANAL (CORRIGIDA)
     # =========================================================
     elif menu == "📋 ANÁLISE SEMANAL":
         st.sidebar.subheader("Filtros Board")
@@ -432,7 +432,8 @@ if uploaded_file:
             <p style="color:#64748b; font-size:1rem;">Período: {periodo_b[0].strftime('%d/%m')} a {periodo_b[1].strftime('%d/%m/%Y')}</p></div>""", unsafe_allow_html=True)
 
         m_v = (df_b["Run Time"].sum()/df_b["Horário Padrão"].replace(0,1).sum()*100)
-        l_v = ((df_b["Machine Counter"].sum()-df_b["Peças Estoque - Ajuste'].sum())/df_b["Machine Counter"].replace(0,1).sum()*100)
+        # CORREÇÃO: Aspas unificadas para aspas duplas na linha abaixo para consertar o SyntaxError
+        l_v = ((df_b["Machine Counter"].sum()-df_b["Peças Estoque - Ajuste"].sum())/df_b["Machine Counter"].replace(0,1).sum()*100)
         pecas_v = df_b["Peças Estoque - Ajuste"].sum()
 
         v1, v2, v3 = st.columns([1, 1, 1])
@@ -512,8 +513,7 @@ if uploaded_file:
                         INSERT INTO reportes (data_registro, turno, coordenador, ocorrencias, maq_analisada, problema,
                         pq1, pq2, pq3, pq4, pq5, oque, quem, quando, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (str(data_rep), turno_rep, coord_rep, txt_ocorrencias, maq_an, prob_an, p1, p2, p3, p4, p5, action_oque, action_quem, action_quando, status_inicial))
-                    conn.commit()
-                    conn.close()
+                    conn.commit(); conn.close()
                     st.success("🎉 Reporte alocado com sucesso!")
 
     # =========================================================
@@ -601,41 +601,33 @@ if uploaded_file:
                             st.rerun()
 
     # =========================================================
-    # NOVA ABA: LANÇAR ANÁLISE SEMANAL (OPERADORES)
+    # ABA: LANÇAR ANÁLISE SEMANAL (OPERADORES)
     # =========================================================
     elif menu == "📝 LANÇAR ANÁLISE SEMANAL":
         st.markdown("## 📝 Formulário de Lançamento — Análise Semanal (Operadores)")
-        st.write("Utilize esta aba para registrar a análise completa de causa raiz estruturada da semana.")
-        
         with st.form("form_analise_semanal", clear_on_submit=True):
             s1, s2, s3 = st.columns(3)
-            with s1:
-                semana_ref = st.date_input("Semana de Referência (Início/Data)", datetime.now().date())
-            with s2:
-                turno_sem = st.selectbox("Turno Analisado", ["T1", "T2", "T3"], key='ts_sem')
-            with s3:
-                maq_sem = st.selectbox("Máquina Alvo", sorted(df_order['Máquina'].unique()), key='mq_sem')
+            with s1: semana_ref = st.date_input("Semana de Referência (Início/Data)", datetime.now().date())
+            with s2: turno_sem = st.selectbox("Turno Analisado", ["T1", "T2", "T3"], key='ts_sem')
+            with s3: maq_sem = st.selectbox("Máquina Alvo", sorted(df_order['Máquina'].unique()), key='mq_sem')
                 
             pior_parada_sem = st.text_input("Pior Parada Detectada (Ofensor da Semana)")
-            
             st.markdown("<div class='section-header'>Análise Causa Raiz — Método dos 5 Porquês</div>", unsafe_allow_html=True)
             spq1 = st.text_input("1º Por que?")
             spq2 = st.text_input("2º Por que?")
             spq3 = st.text_input("3º Por que?")
             spq4 = st.text_input("4º Por que?")
             spq5 = st.text_input("5º Por que? (Causa Raiz)")
-            
             st.markdown("<div class='section-header'>Plano de Ação Semanal Bloqueante</div>", unsafe_allow_html=True)
             sa_oque = st.text_area("O quê (Plano de Ação)")
             sa_quem = st.text_input("Responsável (Quem)")
             sa_quando = st.text_input("Prazo Final (Quando)")
             sa_status = st.selectbox("Status Operacional", ["Pendente", "Em Andamento", "Resolvido"])
-            
             submit_sem = st.form_submit_button("💾 REGISTRAR ANÁLISE SEMANAL NO BANCO")
             
             if submit_sem:
                 if not pior_parada_sem or not spq5:
-                    st.error("Campos essenciais como Pior Parada e Causa Raiz (5º Por que) devem ser informados.")
+                    st.error("Campos essenciais como Pior Parada e Causa Raiz devem ser informados.")
                 else:
                     conn = sqlite3.connect('reportes_turno.db')
                     cursor = conn.cursor()
@@ -644,10 +636,10 @@ if uploaded_file:
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (str(semana_ref), turno_sem, maq_sem, pior_parada_sem, spq1, spq2, spq3, spq4, spq5, spq5, sa_oque, sa_quando, sa_quem, sa_status))
                     conn.commit(); conn.close()
-                    st.success("🎉 Análise semanal gravada de forma definitiva no banco de dados!")
+                    st.success("🎉 Análise semanal gravada de forma definitiva!")
 
     # =========================================================
-    # NOVA ABA: ACOMPANHAMENTO ANÁLISES SEMANAIS
+    # ABA: ACOMPANHAMENTO ANÁLISES SEMANAIS
     # =========================================================
     elif menu == "📋 ACOMP. ANÁLISES SEMANAIS":
         st.markdown("## 📋 Acompanhamento Técnico — Análises dos Operadores")
@@ -661,7 +653,6 @@ if uploaded_file:
             col_fs1, col_fs2 = st.columns(2)
             with col_fs1: status_f = st.multiselect("Filtrar Status", df_db_sem['status'].unique(), default=df_db_sem['status'].unique(), key='sf1')
             with col_fs2: turno_f = st.multiselect("Filtrar Turno", df_db_sem['turno'].unique(), default=df_db_sem['turno'].unique(), key='tf1')
-            
             df_f_sem = df_db_sem[(df_db_sem['status'].isin(status_f)) & (df_db_sem['turno'].isin(turno_f))]
             
             def colorir_linhas_por_status(row):
@@ -692,7 +683,6 @@ if uploaded_file:
                         
                 if st.session_state['mostrar_edicao_semanal']:
                     row_s = df_db_sem[df_db_sem['id'] == id_sel_sem].iloc[0]
-                    
                     esc1, esc2, esc3 = st.columns(3)
                     with esc1: es_pior = st.text_input("Editar Pior Parada", value=str(row_s['pior_parada']))
                     with esc2: es_status = st.selectbox("Editar Status", ["Pendente", "Em Andamento", "Resolvido"], index=["Pendente", "Em Andamento", "Resolvido"].index(row_s['status']), key='status_ed_sem')
@@ -701,7 +691,8 @@ if uploaded_file:
                     st.write("**Editar os 5 Porquês:**")
                     ep1 = st.text_input("1º Por que?", value=str(row_s['pq1']), key='ep1')
                     ep2 = st.text_input("2º Por que?", value=str(row_s['pq2']), key='ep2')
-                    ep3 = st.text_input("3º Por que?", value=str(row_sel['pq3']) if 'row_sel' in locals() else str(row_s['pq3']), key='ep3')
+                    # FIX: Corrigido uso para row_s na linha abaixo para manter escopo correto da aba semanal
+                    ep3 = st.text_input("3º Por que?", value=str(row_s['pq3']), key='ep3')
                     ep4 = st.text_input("4º Por que?", value=str(row_s['pq4']), key='ep4')
                     ep5 = st.text_input("5º Por que?", value=str(row_s['pq5']), key='ep5')
                     
@@ -734,23 +725,18 @@ if uploaded_file:
                             st.rerun()
 
     # =========================================================
-    # NOVA ABA: APRESENTAÇÃO SEMANAL (CRUZAMENTO DOS DADOS COM O BANCO)
+    # ABA: APRESENTAÇÃO SEMANAL
     # =========================================================
     elif menu == "📊 APRESENTAÇÃO SEMANAL":
         st.markdown("<h2 style='text-align:center;'>📊 Reunião Geral de Fechamento & Apresentação Semanal</h2>", unsafe_allow_html=True)
-        
         st.subheader("⚙️ Selecione os Parâmetros da Apresentação")
         ap_c1, ap_c2, ap_c3 = st.columns(3)
-        with ap_c1:
-            maq_ap = st.selectbox("Máquina em Análise", sorted(df_order['Máquina'].unique()), key='maq_ap')
+        with ap_c1: maq_ap = st.selectbox("Máquina em Análise", sorted(df_order['Máquina'].unique()), key='maq_ap')
         with ap_c2:
             turno_ap = st.selectbox("Turno", ["T1", "T2", "T3"], key='turno_ap')
-            # Filtro simplificado de turnos mapeado
             turno_lista = [turno_ap[-1]]
-        with ap_c3:
-            periodo_ap = st.date_input("Período Semana", [df_order['Data'].max() - timedelta(days=7), df_order['Data'].max()], key='per_ap')
+        with ap_c3: periodo_ap = st.date_input("Período Semana", [df_order['Data'].max() - timedelta(days=7), df_order['Data'].max()], key='per_ap')
             
-        # Puxa informações operacionais brutas do arquivo Excel centralizado
         df_ap_bruto = df_order[(df_order['Data'].dt.date >= periodo_ap[0]) & (df_order['Data'].dt.date <= periodo_ap[1]) & (df_order['Turno'].isin(turno_lista))]
         df_ap_maq = df_ap_bruto[df_ap_bruto['Máquina'] == maq_ap]
         df_ap_stops = df_stops[(df_stops['Data'].dt.date >= periodo_ap[0]) & (df_stops['Data'].dt.date <= periodo_ap[1]) & (df_stops['Máquina'] == maq_ap) & (df_stops['Turno'].isin(turno_lista))]
@@ -768,13 +754,9 @@ if uploaded_file:
         with c_kpi2: st.plotly_chart(mini_gauge("Loss Semanal", loss_sem, "#e74c3c", 5, 140), use_container_width=True)
         with c_kpi3: st.markdown(f'<div class="metric-card" style="height:110px;"><div class="metric-title">Volume Realizado Semanal</div><div class="metric-value" style="font-size:1.8rem; margin-top:10px;">{fmt(pecas_sem)}</div></div>', unsafe_allow_html=True)
         
-        # Conexão com o Banco SQLite buscando a análise inserida pelos operadores
         conn = sqlite3.connect('reportes_turno.db')
-        # Filtra buscando correspondência exata de Máquina e Turno
         df_query_db = pd.read_sql_query("""
-            SELECT * FROM analises_semanais 
-            WHERE maquina = ? AND turno = ? 
-            ORDER BY data_registro DESC LIMIT 1
+            SELECT * FROM analises_semanais WHERE maquina = ? AND turno = ? ORDER BY data_registro DESC LIMIT 1
         """, conn, params=(maq_ap, turno_ap))
         conn.close()
         
@@ -795,9 +777,7 @@ if uploaded_file:
             else:
                 st.write("Sem registros de falhas mecânicas no período.")
 
-        # SEÇÃO DA CAUSA RAIZ REPLICADA VIA BANCO DE DADOS
         st.markdown("<div class='section-header'>Análise Causa Raiz Realizada pelos Operadores (Puxada do Banco de Dados)</div>", unsafe_allow_html=True)
-        
         if df_query_db.empty:
             st.warning(f"⚠️ Nenhuma análise técnica foi lançada no banco de dados para a Máquina {maq_ap} no turno {turno_ap}. Peça para o operador preencher na aba 'Lançar Análise Semanal'.")
         else:
