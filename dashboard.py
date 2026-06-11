@@ -721,10 +721,15 @@ else:
                                 conn.execute(text("INSERT INTO nippo_coordenadores (data, turno, coordenador, tecnico, maquina, itens_compartilhar, produtividade, loss, sku, palete_inicial, palete_final, total_ordem) VALUES (:data, :turno, :coord, :tec, :maq, :itens, :prod, :loss, :sku, :p_ini, :p_fim, :tot)"), {"data": str(data_nippo), "turno": turno_nippo, "coord": coordenador_nippo, "tec": tecnico_nippo, "maq": m_item, "itens": dados["itens"], "prod": dados["prod"], "loss": dados["loss"], "sku": dados["sku"], "p_ini": dados["pal_ini"], "p_fim": dados["pal_fim"], "tot": int(dados["tot"])})
                         st.session_state['contador_nippo'] += 1; st.success("🎉 O Nippo completo foi gravado!"); st.rerun()
             with aba_consultar:
+            # === APAGUE TUDO ABAIXO DA SUA LINHA 724 E COLE ISSO ===
                 query_data = st.date_input("Filtrar Data", date.today(), key="q_data")
                 engine = obter_engine()
                 df_nippo_res = pd.read_sql_query(text("SELECT id, data, turno, coordenador, tecnico, maquina, itens_compartilhar, sku, produtividade, loss, palete_inicial, palete_final, total_ordem FROM nippo_coordenadores WHERE data = :data"), engine, params={"data": str(query_data)})
-                if df_nippo_res.empty: st.warning(f"Nenhum diário Nippo encontrado.")
-                else: st.dataframe(df_nippo_res, use_container_width=True)
+                if df_nippo_res.empty: 
+                    st.warning(f"Nenhum diário Nippo encontrado.")
+                else: 
+                    st.dataframe(df_nippo_res, use_container_width=True)
+
+# Este else precisa ter exatamente 0 espaços de indentação (encostado na esquerda)
 else:
     st.info("💡 Por favor, carregue os arquivos Excel para iniciar o Analytics Hub.")
