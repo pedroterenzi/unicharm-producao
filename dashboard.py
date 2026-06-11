@@ -36,13 +36,13 @@ def validar_forca_senha(senha):
 def init_db():
     engine = obter_engine()
     with engine.begin() as conn:
-        # Usuários
+        # Tabela de Usuários
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS usuarios (
                 id SERIAL PRIMARY KEY, login TEXT UNIQUE, senha TEXT, cargo TEXT
             )
         """))
-        # Reportes Diários (Sem os campos fixos de ação)
+        # Tabela de Reportes Diários (Sem campos fixos de ação)
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS reportes (
                 id SERIAL PRIMARY KEY, data_registro TEXT, turno TEXT, coordenador TEXT,
@@ -50,28 +50,28 @@ def init_db():
                 pq1 TEXT, pq2 TEXT, pq3 TEXT, pq4 TEXT, pq5 TEXT
             )
         """))
-        # Ações dos Reportes Diários (1 para Muitos)
+        # TABELA RELACIONADA: Ações dos Reportes Diários (Multi-Ações)
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS acoes_reportes (
                 id SERIAL PRIMARY KEY, reporte_id INTEGER REFERENCES reportes(id) ON DELETE CASCADE,
                 oque TEXT, quem TEXT, quando TEXT, status TEXT
             )
         """))
-        # Análises Semanais (Sem os campos fixos de ação)
+        # Tabela de Análises Semanais (Sem campos fixos de ação)
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS analises_semanais (
                 id SERIAL PRIMARY KEY, data_registro TEXT, turno TEXT, maquina TEXT,
                 pior_parada TEXT, pq1 TEXT, pq2 TEXT, pq3 TEXT, pq4 TEXT, pq5 TEXT, causa_raiz TEXT
             )
         """))
-        # Ações das Análises Semanais (1 para Muitos)
+        # TABELA RELACIONADA: Ações das Análises Semanais (Multi-Ações)
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS acoes_semanais (
                 id SERIAL PRIMARY KEY, analise_id INTEGER REFERENCES analises_semanais(id) ON DELETE CASCADE,
                 oque TEXT, quem TEXT, quando TEXT, status TEXT
             )
         """))
-        # Nippo Coordenadores
+        # Tabela de Nippo Coordenadores
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS nippo_coordenadores (
                 id SERIAL PRIMARY KEY, data TEXT, turno TEXT, coordenador TEXT, tecnico TEXT, maquina TEXT,
@@ -92,7 +92,7 @@ if 'usuario_logado' not in st.session_state: st.session_state['usuario_logado'] 
 if 'cargo_logado' not in st.session_state: st.session_state['cargo_logado'] = None
 if 'contador_cadastro' not in st.session_state: st.session_state['contador_cadastro'] = 0
 
-# --- INICIALIZAÇÃO DE ESTADOS DE EDIÇÃO ---
+# --- INICIALIZAÇÃO DE ESTADOS DE INTERFACE ---
 if 'mostrar_edicao' not in st.session_state: st.session_state['mostrar_edicao'] = False
 if 'id_atual' not in st.session_state: st.session_state['id_atual'] = 0
 if 'mostrar_edicao_semanal' not in st.session_state: st.session_state['mostrar_edicao_semanal'] = False
@@ -106,7 +106,6 @@ def fmt(valor):
     try: return f"{int(valor):,}".replace(",", ".")
     except: return str(valor)
 
-# --- FUNÇÃO GLOBAL DO GRÁFICO GAUGE ---
 def mini_gauge(label, value, color, target, height=150):
     fig = go.Figure(go.Indicator(
         mode="gauge+number", value=value,
@@ -138,7 +137,6 @@ st.markdown("""
         background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #ffffff !important; 
         border: 1px solid #047857 !important; font-weight: 600; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2) !important;
     }
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label icon { display: none !important; }
     .metric-container { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 15px; }
     .metric-card {
         background: #f8fafc; padding: 12px; border-radius: 10px; text-align: center; border: 1px solid #e2e8f0;
@@ -223,7 +221,7 @@ def load_planner_metas_advanced(file, data_ref):
         return {}, {}, 0, 0
 
 # =========================================================
-# TELA DE LOGIN E CADASTRO VIA ABAS
+# TELA DE LOGIN E CADASTRO
 # =========================================================
 if not st.session_state['autenticado']:
     st.markdown("<h1 style='text-align:center; color:#10b981; font-weight:900; margin-top:40px;'>🏭 INDUSTRIAL ANALYTICS HUB</h1>", unsafe_allow_html=True)
@@ -295,6 +293,32 @@ else:
         up_datas = st.file_uploader("📂 Excel DATAS (.xlsx)", type=["xlsx"])
         st.markdown("---")
         if uploaded_file: menu = st.radio("NAVEGAÇÃO", abas_permitidas)
+        
+        st.markdown("---")
+        st.markdown("### 🛡️ Zona de Segurança")
+        if st.button("📥 BAIXAR BACKUP EM EXCEL"):
+            try:
+                engine = obter_engine()
+                df_b1 = pd.read_sql_query("SELECT * FROM reportes", engine)
+                df_b2 = pd.read_sql_query("SELECT * FROM analises_semanais", engine)
+                df_b3 = pd.read_sql_query("SELECT * FROM nippo_coordenadores", engine)
+                df_b4 = pd.read_sql_query("SELECT * FROM acoes_reportes", engine)
+                df_b5 = pd.read_sql_query("SELECT * FROM acoes_semanais", engine)
+
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    df_b1.to_excel(writer, sheet_name='Reportes_Diarios', index=False)
+                    df_b4.to_excel(writer, sheet_name='Acoes_Diarias', index=False)
+                    df_b2.to_excel(writer, sheet_name='Analises_Semanais', index=False)
+                    df_b5.to_excel(writer, sheet_name='Acoes_Semanais', index=False)
+                    df_b3.to_excel(writer, sheet_name='Nippo_Coordenadores', index=False)
+                
+                st.download_button(
+                    label="🟢 CLIQUE PARA BAIXAR .XLSX", data=output.getvalue(),
+                    file_name=f"backup_cloud_hub_{date.today().strftime('%d_%m_%Y')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True
+                )
+            except Exception as e: st.error(f"Erro ao extrair dados para backup: {e}")
 
     if uploaded_file:
         df_order, df_stops = load_data(file_obj=uploaded_file)
@@ -366,19 +390,35 @@ else:
             st.plotly_chart(px.bar(df_s_f.groupby('Problema')['Minutos'].sum().sort_values().tail(10), orientation='h', title="Minutos Totais", color_discrete_sequence=['#f43f5e']), use_container_width=True)
 
         elif menu == "📅 CALENDÁRIO":
-            st.markdown("### 📅 Visão de Cronograma Mensal")
+            mes_sel = st.sidebar.selectbox("Mês", list(calendar.month_name)[1:], index=datetime.now().month-1)
+            m_idx = list(calendar.month_name).index(mes_sel) + 1
+            df_c = df_order[(df_order['Data'].dt.month == m_idx)]
+            cal_data = df_c.groupby(df_c['Data'].dt.day).agg({'Run Time':'sum','Horário Padrão':'sum'}).reset_index()
+            
+            st.markdown(f"### 📅 Cronograma {mes_sel}")
+            cols = st.columns(7)
+            for i, d_name in enumerate(['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo']): cols[i].markdown(f"<div class='calendar-day-name'>{d_name}</div>", unsafe_allow_html=True)
+            
+            ano_ref = df_order['Data'].max().year
+            days = list(calendar.Calendar(0).itermonthdays(ano_ref, m_idx))
+            html_grid = '<div class="calendar-grid">'
+            for d in days:
+                if d == 0: html_grid += '<div></div>'
+                else:
+                    row = cal_data[cal_data['Data']==d]
+                    mov = (row['Run Time'].values[0]/row['Horário Padrão'].replace(0,1).values[0]*100) if not row.empty else 0
+                    cor = "#059669" if mov > 85 else "#dc2626" if mov > 0 else "#f1f5f9"
+                    html_grid += f'<div class="day-card" style="background:{cor}"><span class="day-number">{d}</span><div class="day-status" style="color:{"white" if mov > 0 else "#64748b"}">{mov:.1f}%</div></div>'
+            st.markdown(html_grid + '</div>', unsafe_allow_html=True)
 
-        # =========================================================
-        # ABA: ANÁLISE SEMANAL
-        # =========================================================
         elif menu == "📋 ANÁLISE SEMANAL":
             maq_b = st.sidebar.selectbox("Máquina", sorted(df_order['Máquina'].unique()))
             periodo_b = st.sidebar.date_input("Período", [df_order['Data'].max() - timedelta(days=7), df_order['Data'].max()])
             df_b = df_order[(df_order['Data'].dt.date >= periodo_b[0]) & (df_order['Data'].dt.date <= periodo_b[1]) & (df_order['Máquina'] == maq_b)]
             df_sb = df_stops[(df_stops['Data'].dt.date >= periodo_b[0]) & (df_stops['Data'].dt.date <= periodo_b[1]) & (df_stops['Máquina'] == maq_b)]
             
-            m_v = (df_b["Run Time"].sum()/df_b["Horário Padrão"].replace(0,1).sum()*100)
-            l_v = ((df_b["Machine Counter"].sum()-df_b["Peças Estoque - Ajuste"].sum())/df_b["Machine Counter"].replace(0,1).sum()*100)
+            m_v = (df_b["Run Time"].sum()/df_b["Horário Padrão"].replace(0,1).sum()*100) if not df_b.empty else 0
+            l_v = ((df_b["Machine Counter"].sum()-df_b["Peças Estoque - Ajuste"].sum())/df_b["Machine Counter"].replace(0,1).sum()*100) if not df_b.empty else 0
 
             v1, v2 = st.columns(2)
             with v1: st.plotly_chart(mini_gauge("Movimentação Semanal", m_v, "#10b981", 85, 180), use_container_width=True)
@@ -389,7 +429,7 @@ else:
             st.markdown(f"""<div class="five-why-box"><h3>ANÁLISE 5 PORQUÊS: {pior_p}</h3></div>""", unsafe_allow_html=True)
 
         # =========================================================
-        # 📝 LANÇAR REPORTE (DINÂMICO - MULTI AÇÕES)
+        # 📝 LANÇAR REPORTE (DINÂMICO - MULTI AÇÕES VINCULADAS)
         # =========================================================
         elif menu == "📝 LANÇAR REPORTE":
             st.markdown("## 📝 Registro de Turno + Plano de Ações Coletivas")
@@ -443,10 +483,10 @@ else:
                         st.success(f"🎉 Reporte ID #{reporte_id} salvo com {qtd_salva} ações vinculadas!")
 
         # =========================================================
-        # 📊 ABA: ACOMPANHAMENTO (MULTI AÇÕES)
+        # 📊 ABA: ACOMPANHAMENTO (MULTI AÇÕES RELACIONADAS)
         # =========================================================
         elif menu == "📊 ACOMPANHAMENTO":
-            st.markdown("## 📊 Painel de Controle de Planos de Ação")
+            st.markdown("## 📊 Painel de Controle de Planos de Ação Coletivos")
             engine = obter_engine()
             df_rep = pd.read_sql_query("SELECT id, data_registro, turno, coordenador, maq_analisada, problema FROM reportes ORDER BY data_registro DESC", engine)
             if df_rep.empty: st.info("Nenhum reporte localizado na nuvem.")
@@ -461,7 +501,7 @@ else:
                     
                     tabela_edicao = st.data_editor(
                         df_acoes_vinculadas, num_rows="dynamic",
-                        column_config={"Status": st.column_config.SelectboxColumn("Status", options=["Pendente", "Em Andamento", "Resolvido", "Cancelado"], required=True)},
+                        column_config={"Status": st.column_config.SelectboxColumn("Status", options=["Pendente", "Em Andamento", "Resolvido"], required=True)},
                         use_container_width=True, key=f"ed_grid_{id_selecionado}"
                     )
                     
@@ -534,7 +574,7 @@ else:
                         st.success(f"🎉 Análise semanal cadastrada com {qtd_sem_salva} ações vinculadas!")
 
         # =========================================================
-        # 📋 ABA: ACOMP. ANÁLISES SEMANAIS (MULTI AÇÕES)
+        # 📋 ABA: ACOMP. ANÁLISES SEMANAIS (MULTI AÇÕES VINCULADAS)
         # =========================================================
         elif menu == "📋 ACOMP. ANÁLISES SEMANAIS":
             st.markdown("## 📋 Acompanhamento das Análises Semanais e Planos de Ação")
@@ -589,9 +629,8 @@ else:
             
             c_kpi1, c_kpi2 = st.columns(2)
             mov_sem = (df_ap_maq["Run Time"].sum() / df_ap_maq["Horário Padrão"].replace(0,1).sum() * 100) if not df_ap_maq.empty else 0
-            loss_sem = ((df_ap_maq["Machine Counter"].sum() - df_ap_maq["Peças Estoque - Ajuste"].sum()) / df_ap_maq["Machine Counter"].replace(0,1).sum() * 100) if not df_ap_maq.empty else 0
+            loss_sem = ((df_ap_maq["Machine Counter"].sum() - df_ap_maq["Peças Estoque - Ajuste'].sum()) / df_ap_maq["Machine Counter"].replace(0,1).sum() * 100) if not df_ap_maq.empty else 0
             
-            # Gráficos renderizando via função global sem risco de NameError
             with c_kpi1: st.plotly_chart(mini_gauge("Movimentação Semanal", mov_sem, "#10b981", 85, 140), use_container_width=True)
             with c_kpi2: st.plotly_chart(mini_gauge("Loss Semanal", loss_sem, "#e74c3c", 5, 140), use_container_width=True)
             
@@ -614,7 +653,7 @@ else:
                 st.dataframe(df_list_ac, use_container_width=True)
 
         # =========================================================
-        # 📋 NIPPO COORDENADORES
+        # 📋 NIPPO COORDENADORES (COM SISTEMA DE EDIÇÃO DE LINHAS)
         # =========================================================
         elif menu == "📋 NIPPO COORDENADORES":
             st.markdown("## 📋 Nippo Coordenadores — Troca de Turno Operacional")
@@ -680,5 +719,58 @@ else:
                         if str(linha['itens_compartilhar']).strip():
                             st.markdown(f"🔹 **{linha['maquina']} — SKU: {linha['sku']}** (Turno: {linha['turno']} | Coord: {linha['coordenador']} | Tec: {linha['tecnico']})")
                             st.info(linha['itens_compartilhar'])
+
+                st.markdown("<div class='section-header'>✏ ... Central de Gerenciamento e Modificações do Nippo</div>", unsafe_allow_html=True)
+                col_ed1, col_ed2 = st.columns(2)
+                with col_ed1: target_data_ed = st.date_input("Selecione a Data para Editar", date.today(), key="tg_dt_ed")
+                with col_ed2: target_turno_ed = st.selectbox("Selecione o Turno para Editar", ["1º Turno", "2º Turno", "3º Turno"], index=2, key="tg_tr_ed")
+                
+                df_atual_nippo = pd.read_sql_query(text("SELECT * FROM nippo_coordenadores WHERE data = :data AND turno = :turno"), engine, params={"data": str(target_data_ed), "turno": target_turno_ed})
+                if df_atual_nippo.empty: st.caption("Nenhum registro encontrado na área de modificação.")
+                else:
+                    if not st.session_state['mostrar_edicao_nippo']:
+                        if st.button("🔍 ABRIR FORMULÁRIO DE EDIÇÃO DO NIPPO", use_container_width=True): st.session_state['mostrar_edicao_nippo'] = True; st.rerun()
+                    else:
+                        if st.button("🔼 MINIMIZAR / FECHAR PAINEL DE EDIÇÃO DO NIPPO", use_container_width=True): st.session_state['mostrar_edicao_nippo'] = False; st.rerun()
+                    if st.session_state['mostrar_edicao_nippo']:
+                        row_m0 = df_atual_nippo.iloc[0]
+                        ec_n1, ec_n2 = st.columns(2)
+                        with ec_n1: edit_nippo_coord = st.text_input("Corrigir Coordenador Geral", value=str(row_m0['coordenador'])).upper()
+                        with ec_n2: edit_nippo_tec = st.text_input("Corrigir Técnico Geral", value=str(row_m0['tecnico'])).upper()
+                        
+                        maqs_banco = [f"M{i}" for i in range(1, 8)]
+                        mapa_edicao_final = {}
+                        for m_b in maqs_banco:
+                            row_maq_b = df_atual_nippo[df_atual_nippo['maquina'] == m_b]
+                            if not row_maq_b.empty:
+                                r_m = row_maq_b.iloc[0]
+                                id_reg = int(r_m['id']); val_it = str(r_m['itens_compartilhar']); val_sk = str(r_m['sku']); val_pr = float(r_m['produtividade']); val_ls = float(r_m['loss']); val_pi = str(r_m['palete_inicial']); val_pf = str(r_m['palete_final']); val_tt = int(r_m['total_ordem'])
+                            else: id_reg = None; val_it, val_sk, val_pr, val_ls, val_pi, val_pf, val_tt = "", "", 0.0, 0.0, "", "", 0
+                            with st.expander(f"⚙️ Alterar Informações — {m_b}", expanded=False):
+                                ce1, ce2, ce3 = st.columns([2, 1, 1])
+                                with ce1: tx_it = st.text_area(f"Ocorrências ({m_b})", value=val_it, key=f"e_tx_{m_b}", height=90)
+                                with ce2:
+                                    sk_it = st.text_input(f"SKU ({m_b})", value=val_sk, key=f"e_sk_{m_b}").upper()
+                                    pr_it = st.number_input(f"Produtividade % ({m_b})", min_value=0.0, max_value=100.0, value=val_pr, step=0.1, key=f"e_pr_{m_b}")
+                                    ls_it = st.number_input(f"Loss % ({m_b})", min_value=0.0, max_value=100.0, value=val_ls, step=0.1, key=f"e_ls_{m_b}")
+                                with ce3:
+                                    pi_it = st.text_input(f"Palete Inicial ({m_b})", value=val_pi, key=f"e_pi_{m_b}").upper()
+                                    pf_it = st.text_input(f"Palete Final ({m_b})", value=val_pf, key=f"e_pf_{m_b}").upper()
+                                    tt_it = st.number_input(f"Total Ordem ({m_b})", min_value=0, value=val_tt, step=1, key=f"e_tt_{m_b}")
+                            mapa_edicao_final[m_b] = {"id": id_reg, "itens": tx_it, "sku": sk_it, "prod": pr_it, "loss": ls_it, "pal_ini": pi_it, "pal_fim": pf_it, "tot": tt_it}
+                        
+                        st.markdown("---")
+                        col_nippo_act1, col_nippo_act2 = st.columns(2)
+                        with col_nippo_act1:
+                            if st.button("💾 SALVAR ALTERAÇÕES DO NIPPO", use_container_width=True):
+                                with engine.begin() as conn:
+                                    for m_key, e_dados in mapa_edicao_final.items():
+                                        if e_dados["id"] is not None: conn.execute(text("UPDATE nippo_coordenadores SET coordenador=:coord, tecnico=:tec, itens_compartilhar=:itens, sku=:sku, produtividade=:prod, loss=:loss, palete_inicial=:p_ini, palete_final=:p_fim, total_ordem=:tot WHERE id=:id"), {"coord": edit_nippo_coord, "tec": edit_nippo_tec, "itens": e_dados["itens"], "sku": e_dados["sku"], "prod": e_dados["prod"], "loss": e_dados["loss"], "p_ini": e_dados["pal_ini"], "p_fim": e_dados["pal_fim"], "tot": int(e_dados["tot"]), "id": e_dados["id"]})
+                                        else: conn.execute(text("INSERT INTO nippo_coordenadores (data, turno, coordenador, tecnico, maquina, itens_compartilhar, produtividade, loss, sku, palete_inicial, palete_final, total_ordem) VALUES (:data, :turno, :coord, :tec, :maq, :itens, :prod, :loss, :sku, :p_ini, :p_fim, :tot)"), {"data": str(target_data_ed), "turno": target_turno_ed, "coord": edit_nippo_coord, "tec": edit_nippo_tec, "maq": m_key, "itens": e_dados["itens"], "prod": e_dados["prod"], "loss": e_dados["loss"], "sku": e_dados["sku"], "p_ini": e_dados["pal_ini"], "p_fim": e_dados["pal_fim"], "tot": int(e_dados["tot"])})
+                                st.session_state['mostrar_edicao_nippo'] = False; st.success("🎉 Salvo!"); st.rerun()
+                        with col_nippo_act2:
+                            if st.button("❌ EXCLUIR TURNO COMPLETO DEFINITIVAMENTE", type="primary", use_container_width=True):
+                                with engine.begin() as conn: conn.execute(text("DELETE FROM nippo_coordenadores WHERE data = :data AND turno = :turno"), {"data": str(target_data_ed), "turno": target_turno_ed})
+                                st.session_state['mostrar_edicao_nippo'] = False; st.success("Deletado!"); st.rerun()
     else:
         st.info("💡 Por favor, carregue os arquivos Excel para iniciar o Analytics Hub.")
