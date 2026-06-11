@@ -5,11 +5,16 @@ import plotly.express as px
 import calendar
 from datetime import datetime, timedelta, date
 import sqlite3
+import io
 
 # 1. CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(layout="wide", page_title="Industrial Analytics Hub", page_icon="⚙️")
 
-# --- INICIALIZAÇÃO DE ESTADOS DO STREAMLIT (Controle de Visibilidade e Resets) ---
+# --- CAMINHO DA REDE CORPORATIVA UNICHARM (Blindagem de Dados) ---
+# Definido o caminho exato enviado para persistência permanente no Disco X
+CAMINHO_BANCO_REDE = r"X:\10_Jaguariuna\1.Production\2.(Historico de produtividade)\1.(Produtividade)\Relatório de produção\reportes_turno.db"
+
+# --- INICIALIZAÇÃO DE ESTADOS DO STREAMLIT ---
 if 'mostrar_edicao' not in st.session_state:
     st.session_state['mostrar_edicao'] = False
 if 'id_atual' not in st.session_state:
@@ -29,12 +34,12 @@ if 'chave_nippo_edicao' not in st.session_state:
     st.session_state['chave_nippo_edicao'] = ""
 
 # =========================================================
-# BANCO DE DADOS LOCAL (SQLite)
+# BANCO DE DADOS NA REDE (SQLite)
 # =========================================================
 def init_db():
-    conn = sqlite3.connect('reportes_turno.db')
+    # Conecta diretamente ao arquivo alocado no servidor de arquivos da empresa
+    conn = sqlite3.connect(CAMINHO_BANCO_REDE)
     cursor = conn.cursor()
-    # Tabela 1: Reportes Diários de Turno
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS reportes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,7 +56,6 @@ def init_db():
             status TEXT
         )
     """)
-    # Tabela 2: Análises Semanais dos Operadores
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS analises_semanais (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,7 +71,6 @@ def init_db():
             status TEXT
         )
     """)
-    # Tabela 3: Tabela Nippo Coordenadores (Troca de Turno por Máquina)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS nippo_coordenadores (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,10 +92,12 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Inicializa o banco de dados local com todas as tabelas estruturadas
-init_db()
+# Executa a inicialização das tabelas direto na rede
+try:
+    init_db()
+except Exception as e:
+    st.error(f"⚠️ Erro de Conexão com o Disco X da Rede: {e}. Verifique se o mapeamento de rede está ativo no Windows.")
 
-# --- FUNÇÃO AUXILIAR DE FORMATAÇÃO (Milhares com ponto) ---
 def fmt(valor):
     if pd.isna(valor) or valor is None:
         return "0"
@@ -101,94 +106,44 @@ def fmt(valor):
     except:
         return str(valor)
 
-# --- ESTILIZAÇÃO CSS PREMIUM (LIGHT MODE - PADRONIZAÇÃO ESTÉTICA DO MENU) ---
+# --- ESTILIZAÇÃO CSS PREMIUM (LIGHT MODE) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap');
     * { font-family: 'Inter', sans-serif; }
-    
-    /* Fundo Branco */
     .stApp { background-color: #ffffff; color: #1e293b; }
-    
-    /* --- MENU LATERAL ULTRA MODERNO E PADRONIZADO --- */
     [data-testid="stSidebar"] { background-color: #f8fafc; border-right: 1px solid #e2e8f0; }
-    
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-        width: 100%;
-    }
-    
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] { display: flex; flex-direction: column; gap: 2px; width: 100%; }
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label {
-        background-color: #ffffff !important; 
-        border: 1px solid #e2e8f0 !important;
-        padding: 12px 18px !important; 
-        border-radius: 10px !important;
-        margin-bottom: 5px !important; 
-        color: #475569 !important; 
-        cursor: pointer;
-        font-weight: 500;
-        font-size: 0.82rem;
-        transition: all 0.2s ease-in-out;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.02) !important;
-        display: flex !important;
-        align-items: center;
-        justify-content: flex-start;
-        width: 100% !important;
-        box-sizing: border-box !important;
+        background-color: #ffffff !important; border: 1px solid #e2e8f0 !important;
+        padding: 12px 18px !important; border-radius: 10px !important; margin-bottom: 5px !important; 
+        color: #475569 !important; cursor: pointer; font-weight: 500; font-size: 0.82rem;
+        transition: all 0.2s ease-in-out; box-shadow: 0 1px 2px rgba(0,0,0,0.02) !important;
+        display: flex !important; align-items: center; justify-content: flex-start; width: 100% !important; box-sizing: border-box !important;
     }
-    
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label:hover {
-        background-color: #f1f5f9 !important;
-        border-color: #cbd5e1 !important;
-        color: #0f172a !important;
-        transform: translateX(2px);
-    }
-    
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label:hover { background-color: #f1f5f9 !important; border-color: #cbd5e1 !important; color: #0f172a !important; transform: translateX(2px); }
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label[data-checked="true"] {
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; 
-        color: #ffffff !important; 
-        border: 1px solid #047857 !important;
-        font-weight: 600;
-        box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2) !important;
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #ffffff !important; 
+        border: 1px solid #047857 !important; font-weight: 600; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2) !important;
     }
-    
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label icon {
-        display: none !important;
-    }
-
-    /* Cards de Métricas Light */
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label icon { display: none !important; }
     .metric-container { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 15px; }
     .metric-card {
-        background: #f8fafc; padding: 12px; border-radius: 10px;
-        text-align: center; border: 1px solid #e2e8f0;
+        background: #f8fafc; padding: 12px; border-radius: 10px; text-align: center; border: 1px solid #e2e8f0;
         flex: 1; min-height: 80px; display: flex; flex-direction: column; justify-content: center;
     }
     .metric-title { color: #64748b; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; margin-bottom: 2px; }
     .metric-value { color: #10b981; font-size: 1.3rem; font-weight: 900; line-height: 1; }
-
-    /* Calendário Light */
     .calendar-day-name { text-align: center; font-weight: 900; color: #10b981; font-size: 0.8rem; padding-bottom: 5px; }
     .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; width: 100%; }
     .day-card { background: #f8fafc; border-radius: 8px; padding: 10px; min-height: 95px; border: 1px solid #e2e8f0; }
     .day-number { font-size: 1rem; font-weight: 900; color: #1e293b; }
     .day-status { font-size: 0.75rem; font-weight: 600; color: #64748b; text-align: right; }
-
-    /* Ranking e Feedback */
     .highlight-rank { background: #dcfce7 !important; color: #166534 !important; font-weight: 900; border-radius: 5px; padding: 5px; }
     .feedback-box { padding: 12px; border-radius: 8px; margin-bottom: 10px; text-align: center; font-weight: 700; font-size: 0.9rem; border: 1px solid #e2e8f0; }
-
-    /* 5 Porquês */
     .five-why-box { border: 2px solid #1e293b; padding: 15px; background: #ffffff; color: #000; margin-top: 15px; }
     .five-why-line { border-bottom: 1px solid #000; padding: 10px 0; font-size: 0.9rem; }
-
-    /* Reporte Diário Header */
-    .section-header {
-        background: #f1f5f9; padding: 10px; border-radius: 5px;
-        color: #0f172a; font-weight: 800; text-transform: uppercase;
-        margin-top: 20px; border-left: 5px solid #10b981; font-size: 0.9rem;
-    }
+    .section-header { background: #f1f5f9; padding: 10px; border-radius: 5px; color: #0f172a; font-weight: 800; text-transform: uppercase; margin-top: 20px; border-left: 5px solid #10b981; font-size: 0.9rem; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -267,6 +222,8 @@ def load_planner_metas_advanced(file, data_ref):
 # --- SIDEBAR ---
 with st.sidebar:
     st.markdown("<h1 style='font-size:1.4rem; color:#10b981; font-weight:900; margin-bottom:15px; text-align:center;'>🏭 ANALYTICS HUB</h1>", unsafe_allow_html=True)
+    st.caption(f"💾 Banco de Dados Conectado no Disco X (Rede Unicharm)")
+    
     uploaded_file = st.file_uploader("📂 Carregar Excel Produção (.xlsm)", type=["xlsm"])
     up_datas = st.file_uploader("📂 Carregar Excel DATAS (.xlsx)", type=["xlsx"])
     st.markdown("---")
@@ -284,6 +241,32 @@ with st.sidebar:
             "📊 APRESENTAÇÃO SEMANAL",
             "📋 NIPPO COORDENADORES"
         ])
+    
+    st.markdown("---")
+    st.markdown("### 🛡️ Zona de Segurança")
+    if st.button("📥 BAIXAR BACKUP EM EXCEL"):
+        try:
+            conn = sqlite3.connect(CAMINHO_BANCO_REDE)
+            df_b1 = pd.read_sql_query("SELECT * FROM reportes", conn)
+            df_b2 = pd.read_sql_query("SELECT * FROM analises_semanais", conn)
+            df_b3 = pd.read_sql_query("SELECT * FROM nippo_coordenadores", conn)
+            conn.close()
+
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df_b1.to_excel(writer, sheet_name='Reportes_Diarios', index=False)
+                df_b2.to_excel(writer, sheet_name='Analises_Semanais', index=False)
+                df_b3.to_excel(writer, sheet_name='Nippo_Coordenadores', index=False)
+            
+            st.download_button(
+                label="🟢 CLIQUE PARA BAIXAR .XLSX",
+                data=output.getvalue(),
+                file_name=f"backup_industrial_hub_{date.today().strftime('%d_%m_%Y')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+        except Exception as e:
+            st.error(f"Erro ao extrair dados para backup: {e}")
 
 if uploaded_file:
     df_order, df_stops = load_data(uploaded_file)
@@ -534,7 +517,7 @@ if uploaded_file:
                 if not coord_rep or not prob_an:
                     st.error("Por favor, preencha os campos essenciais.")
                 else:
-                    conn = sqlite3.connect('reportes_turno.db')
+                    conn = sqlite3.connect(CAMINHO_BANCO_REDE)
                     cursor = conn.cursor()
                     cursor.execute("""
                         INSERT INTO reportes (data_registro, turno, coordenador, ocorrencias, maq_analisada, problema,
@@ -548,7 +531,7 @@ if uploaded_file:
     # =========================================================
     elif menu == "📊 ACOMPANHAMENTO":
         st.markdown("## 📊 Painel de Acompanhamento de Ações")
-        conn = sqlite3.connect('reportes_turno.db')
+        conn = sqlite3.connect(CAMINHO_BANCO_REDE)
         df_db = pd.read_sql_query("SELECT * FROM reportes ORDER BY data_registro DESC", conn)
         conn.close()
         
@@ -607,7 +590,7 @@ if uploaded_file:
                     col_actions1, col_actions2 = st.columns(2)
                     with col_actions1:
                         if st.button("💾 SALVAR ALTERAÇÕES", use_container_width=True):
-                            conn = sqlite3.connect('reportes_turno.db')
+                            conn = sqlite3.connect(CAMINHO_BANCO_REDE)
                             cursor = conn.cursor()
                             cursor.execute("""
                                 UPDATE reportes SET coordenador=?, status=?, maq_analisada=?, ocorrencias=?, problema=?, 
@@ -619,7 +602,7 @@ if uploaded_file:
                             st.rerun()
                     with col_actions2:
                         if st.button("❌ EXCLUIR REPORTE DEFINITIVAMENTE", type="primary", use_container_width=True):
-                            conn = sqlite3.connect('reportes_turno.db')
+                            conn = sqlite3.connect(CAMINHO_BANCO_REDE)
                             cursor = conn.cursor()
                             cursor.execute("DELETE FROM reportes WHERE id = ?", (int(id_selecionado),))
                             conn.commit(); conn.close()
@@ -656,7 +639,7 @@ if uploaded_file:
                 if not pior_parada_sem or not spq5:
                     st.error("Campos essenciais como Pior Parada e Causa Raiz devem ser informados.")
                 else:
-                    conn = sqlite3.connect('reportes_turno.db')
+                    conn = sqlite3.connect(CAMINHO_BANCO_REDE)
                     cursor = conn.cursor()
                     cursor.execute("""
                         INSERT INTO analises_semanais (data_registro, turno, maquina, pior_parada, pq1, pq2, pq3, pq4, pq5, causa_raiz, plano_acao, prazo, responsavel, status)
@@ -670,7 +653,7 @@ if uploaded_file:
     # =========================================================
     elif menu == "📋 ACOMP. ANÁLISES SEMANAIS":
         st.markdown("## 📋 Acompanhamento Técnico — Análises dos Operadores")
-        conn = sqlite3.connect('reportes_turno.db')
+        conn = sqlite3.connect(CAMINHO_BANCO_REDE)
         df_db_sem = pd.read_sql_query("SELECT * FROM analises_semanais ORDER BY data_registro DESC", conn)
         conn.close()
         
@@ -725,13 +708,13 @@ if uploaded_file:
                     st.write("**Editar Plano:**")
                     e_oque = st.text_area("O quê (Plano)", value=str(row_s['plano_acao']))
                     e_quem = st.text_input("Quem (Responsável)", value=str(row_s['responsavel']))
-                    e_quando = st.text_input("Quando (Prazo)", value=str(row_s['prazo']))
+                    e_quando = st.text_input("Quando (Prazo)", value=str(row_s['quando']))
                     
                     st.markdown("---")
                     btn_col1, btn_col2 = st.columns(2)
                     with btn_col1:
                         if st.button("💾 SALVAR ATUALIZAÇÃO SEMANAL", use_container_width=True):
-                            conn = sqlite3.connect('reportes_turno.db')
+                            conn = sqlite3.connect(CAMINHO_BANCO_REDE)
                             cursor = conn.cursor()
                             cursor.execute("""
                                 UPDATE analises_semanais SET pior_parada=?, status=?, maquina=?, pq1=?, pq2=?, pq3=?, pq4=?, pq5=?, causa_raiz=?, plano_acao=?, responsavel=?, prazo=? WHERE id=?
@@ -742,7 +725,7 @@ if uploaded_file:
                             st.rerun()
                     with btn_col2:
                         if st.button("❌ DELETAR ANÁLISE SEMANAL", type="primary", use_container_width=True):
-                            conn = sqlite3.connect('reportes_turno.db')
+                            conn = sqlite3.connect(CAMINHO_BANCO_REDE)
                             cursor = conn.cursor()
                             cursor.execute("DELETE FROM analises_semanais WHERE id = ?", (int(id_sel_sem),))
                             conn.commit(); conn.close()
@@ -780,7 +763,7 @@ if uploaded_file:
         with c_kpi2: st.plotly_chart(mini_gauge("Loss Semanal", loss_sem, "#e74c3c", 5, 140), use_container_width=True)
         with c_kpi3: st.markdown(f'<div class="metric-card" style="height:110px;"><div class="metric-title">Volume Realizado Semanal</div><div class="metric-value" style="font-size:1.8rem; margin-top:10px;">{fmt(pecas_sem)}</div></div>', unsafe_allow_html=True)
         
-        conn = sqlite3.connect('reportes_turno.db')
+        conn = sqlite3.connect(CAMINHO_BANCO_REDE)
         df_query_db = pd.read_sql_query("""
             SELECT * FROM analises_semanais 
             WHERE maquina = ? AND turno = ? AND data_registro >= ? AND data_registro <= ?
@@ -834,7 +817,7 @@ if uploaded_file:
             """, unsafe_allow_html=True)
 
     # =========================================================
-    # ABA: 📋 NIPPO COORDENADORES (COM SISTEMA DE EDIÇÃO E EXCLUSÃO)
+    # ABA: 📋 NIPPO COORDENADORES
     # =========================================================
     elif menu == "📋 NIPPO COORDENADORES":
         st.markdown("## 📋 Nippo Coordenadores — Troca de Turno Operacional")
@@ -882,7 +865,7 @@ if uploaded_file:
                 if not coordenador_nippo or not tecnico_nippo:
                     st.error("Não é possível salvar. Os campos Coordenador e Técnico são obrigatórios.")
                 else:
-                    conn = sqlite3.connect('reportes_turno.db')
+                    conn = sqlite3.connect(CAMINHO_BANCO_REDE)
                     cursor = conn.cursor()
                     try:
                         for m_item, dados in mapa_inputs_maquinas.items():
@@ -908,7 +891,7 @@ if uploaded_file:
             with c_f2: query_turno = st.selectbox("Filtrar Turno", ["Todos", "1º Turno", "2º Turno", "3º Turno"], index=0)
             with c_f3: query_maq = st.selectbox("Filtrar Máquina", ["Todas", "M1", "M2", "M3", "M4", "M5", "M6", "M7"], index=0)
                 
-            conn = sqlite3.connect('reportes_turno.db')
+            conn = sqlite3.connect(CAMINHO_BANCO_REDE)
             sql_txt = "SELECT id, data, turno, coordenador, tecnico, maquina, itens_compartilhar, sku, produtividade, loss, palete_inicial, palete_final, total_ordem FROM nippo_coordenadores WHERE data = ?"
             parametros_filtro = [str(query_data)]
             
@@ -932,9 +915,6 @@ if uploaded_file:
                         st.markdown(f"🔹 **{linha['maquina']} — SKU: {linha['sku']}** (Turno: {linha['turno']} | Coordenador: {linha['coordenador']} | Técnico: {linha['tecnico']})")
                         st.info(linha['itens_compartilhar'])
 
-            # =========================================================
-            # NOVOS RECURSOS DE GERENCIAMENTO (EDITAR / EXCULIR REPORTE NIPPO)
-            # =========================================================
             st.markdown("<div class='section-header'>✏️ Central de Gerenciamento e Modificações do Nippo</div>", unsafe_allow_html=True)
             
             col_ed1, col_ed2 = st.columns(2)
@@ -946,7 +926,7 @@ if uploaded_file:
                 st.session_state['chave_nippo_edicao'] = chave_composta
                 st.session_state['mostrar_edicao_nippo'] = False
 
-            conn = sqlite3.connect('reportes_turno.db')
+            conn = sqlite3.connect(CAMINHO_BANCO_REDE)
             df_atual_nippo = pd.read_sql_query("SELECT * FROM nippo_coordenadores WHERE data = ? AND turno = ?", conn, params=(str(target_data_ed), target_turno_ed))
             conn.close()
 
@@ -965,7 +945,6 @@ if uploaded_file:
                 if st.session_state['mostrar_edicao_nippo']:
                     st.markdown(f"#### Editando Dados de Linha do Turno: `{target_turno_ed}` do Dia `{target_data_ed.strftime('%d/%m/%Y')}`")
                     
-                    # Carrega os dados gerais baseado na primeira linha retornada do banco
                     coord_atual_val = df_atual_nippo.iloc[0]['coordenador']
                     tec_atual_val = df_atual_nippo.iloc[0]['tecnico']
                     
@@ -979,7 +958,6 @@ if uploaded_file:
                     for m_b in maqs_banco:
                         row_maq_b = df_atual_nippo[df_atual_nippo['maquina'] == m_b]
                         
-                        # Verifica se a máquina possui dados gravados, se não cria vazia
                         if not row_maq_b.empty:
                             r_m = row_maq_b.iloc[0]
                             id_registro_banco = int(r_m['id'])
@@ -1014,10 +992,9 @@ if uploaded_file:
                     st.markdown("---")
                     col_nippo_act1, col_nippo_act2 = st.columns(2)
                     
-                    # 1. Salvar Alterações
                     with col_nippo_act1:
                         if st.button("💾 SALVAR ALTERAÇÕES DO NIPPO", use_container_width=True):
-                            conn = sqlite3.connect('reportes_turno.db')
+                            conn = sqlite3.connect(CAMINHO_BANCO_REDE)
                             cursor = conn.cursor()
                             for m_key, e_dados in mapa_edicao_final.items():
                                 if e_dados["id"] is not None:
@@ -1027,20 +1004,18 @@ if uploaded_file:
                                         WHERE id=?
                                     """, (edit_nippo_coord, edit_nippo_tec, e_dados["itens"], e_dados["sku"], e_dados["prod"], e_dados["loss"], e_dados["pal_ini"], e_dados["pal_fim"], int(e_dados["tot"]), e_dados["id"]))
                                 else:
-                                    # Se a máquina não existia originalmente no banco por erro, insere agora
                                     cursor.execute("""
                                         INSERT INTO nippo_coordenadores (data, turno, coordenador, tecnico, maquina, itens_compartilhar, produtividade, loss, sku, palete_inicial, palete_final, total_ordem)
                                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                    """, (str(target_data_ed), target_turno_ed, edit_nippo_coord, edit_nippo_tec, m_key, e_dados["itens"], e_dados["prod"], e_dados["loss"], e_dados["sku"], e_dados["pal_ini"], e_dados["pal_fim"], int(e_dados["tot"])))
+                                    """, (str(data_nippo), turno_nippo, edit_nippo_coord, edit_nippo_tec, m_key, e_dados["itens"], e_dados["prod"], e_dados["loss"], e_dados["sku"], e_dados["pal_ini"], e_dados["pal_fim"], int(e_dados["tot"])))
                             conn.commit(); conn.close()
                             st.session_state['mostrar_edicao_nippo'] = False
                             st.success("🎉 Todas as modificações de turno por máquina foram salvas com sucesso!")
                             st.rerun()
                             
-                    # 2. Excluir Turno Completo
                     with col_nippo_act2:
                         if st.button("❌ EXCLUIR TURNO COMPLETO DEFINITIVAMENTE", type="primary", use_container_width=True):
-                            conn = sqlite3.connect('reportes_turno.db')
+                            conn = sqlite3.connect(CAMINHO_BANCO_REDE)
                             cursor = conn.cursor()
                             cursor.execute("DELETE FROM nippo_coordenadores WHERE data = ? AND turno = ?", (str(target_data_ed), target_turno_ed))
                             conn.commit(); conn.close()
