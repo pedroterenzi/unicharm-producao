@@ -27,7 +27,7 @@ def hash_senha(senha):
 def init_db():
     engine = obter_engine()
     with engine.begin() as conn:
-        # Nova Tabela de Usuários com controle de cargos
+        # Tabela de Usuários com controle de cargos
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS usuarios (
                 id SERIAL PRIMARY KEY,
@@ -126,6 +126,18 @@ def fmt(valor):
         return f"{int(valor):,}".replace(",", ".")
     except:
         return str(valor)
+
+# --- CORREÇÃO DO NAMEERROR: FUNÇÃO GLOBAL DO GRÁFICO GAUGE ---
+def mini_gauge(label, value, color, target, height=150):
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number", value=value,
+        number={'suffix': "%", 'font': {'size': 18, 'color': '#1e293b'}},
+        title={'text': label, 'font': {'size': 12, 'color': '#64748b'}},
+        gauge={'axis': {'range': [0, 100], 'tickcolor': '#1e293b'}, 'bar': {'color': color},
+               'threshold': {'line': {'color': "#1e293b", 'width': 2}, 'value': target}}
+    ))
+    fig.update_layout(height=height, margin=dict(l=10, r=10, t=30, b=10), paper_bgcolor='rgba(0,0,0,0)', font={'color': "#1e293b"})
+    return fig
 
 # --- ESTILIZAÇÃO CSS PREMIUM (LIGHT MODE) ---
 st.markdown("""
@@ -241,13 +253,12 @@ def load_planner_metas_advanced(file, data_ref):
         return {}, {}, 0, 0
 
 # =========================================================
-# TELA DE AUTENTICAÇÃO E CADASTRO (EXIBIDA SE NÃO LOGADO)
+# TELA DE AUTENTICAÇÃO E CADASTRO
 # =========================================================
 if not st.session_state['autenticado']:
     st.markdown("<h1 style='text-align:center; color:#10b981; font-weight:900; margin-top:50px;'>🏭 INDUSTRIAL ANALYTICS HUB</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align:center; color:#64748b;'>Efetue o login ou realize o seu cadastro para acessar as visões operacionais.</p>", unsafe_allow_html=True)
     
-    # Centralização dos blocos de formulário
     col_login, col_cadastro = st.columns(2)
     
     with col_login:
@@ -260,7 +271,6 @@ if not st.session_state['autenticado']:
                 st.warning("Preencha todos os campos para autenticar.")
             else:
                 engine = obter_engine()
-                # Verifica as credenciais comparando o hash de segurança da senha
                 df_auth = pd.read_sql_query(
                     text("SELECT login, cargo FROM usuarios WHERE login = :login AND senha = :senha"),
                     engine, params={"login": login_user, "senha": hash_senha(senha_user)}
@@ -289,7 +299,6 @@ if not st.session_state['autenticado']:
             else:
                 engine = obter_engine()
                 try:
-                    # Tenta inserir o novo usuário de forma blindada na nuvem
                     with engine.begin() as conn:
                         conn.execute(text("""
                             INSERT INTO usuarios (login, senha, cargo) VALUES (:login, :senha, :cargo)
@@ -302,10 +311,9 @@ if not st.session_state['autenticado']:
 # SISTEMA PRINCIPAL (LIBERADO APÓS LOGAR)
 # =========================================================
 else:
-    # --- FILTRAGEM DINÂMICA DE ABAS POR PRIVILÉGIO DE CARGO ---
-    cargo = st.session_state['cargo_cargo'] = st.session_state['cargo_logado']
+    # --- CORREÇÃO DE CHAVE: MAPEAMENTO DO CARGO DA SESSÃO ---
+    cargo = st.session_state['cargo_logado']
     
-    # 1. Definição do cardápio completo de abas
     todas_abas = [
         "📋 REPORTE DIÁRIO", "📈 PERFORMANCE", "🛑 TOP 10 PARADAS", "📅 CALENDÁRIO", 
         "📋 ANÁLISE SEMANAL", "📝 LANÇAR REPORTE", "📊 ACOMPANHAMENTO",
@@ -313,14 +321,11 @@ else:
         "📋 NIPPO COORDENADORES"
     ]
     
-    # 2. Aplicação das restrições pedidas
     if cargo == "Operador":
         abas_permitidas = ["📝 LANÇAR ANÁLISE SEMANAL", "📊 APRESENTAÇÃO SEMANAL"]
     elif cargo in ["Menor Aprendiz", "Assistente"]:
-        # Tira apenas as abas de acompanhamento e o nippo dos coordenadores
         abas_permitidas = [a for a in todas_abas if a not in ["📊 ACOMPANHAMENTO", "📋 ACOMP. ANÁLISES SEMANAIS", "📋 NIPPO COORDENADORES"]]
     else:
-        # Gerente, Coordenador e Analista possuem acesso irrestrito
         abas_permitidas = todas_abas
 
     # --- SIDEBAR ---
@@ -339,7 +344,6 @@ else:
         up_datas = st.file_uploader("📂 Carregar Excel DATAS (.xlsx)", type=["xlsx"])
         st.markdown("---")
         if uploaded_file:
-            # O rádio monta apenas a lista dinâmica filtrada pelo cargo
             menu = st.radio("NAVEGAÇÃO", abas_permitidas)
         
         st.markdown("---")
@@ -368,9 +372,11 @@ else:
                 st.error(f"Erro ao extrair dados para backup: {e}")
 
     if uploaded_file:
-        df_order, df_stops = load_data(uploaded_file)
+        df_order, df_stops = load_data(file_obj=uploaded_file)
 
-        # Lógica condicional das abas renderizadas de acordo com a escolha filtrada
+        # =========================================================
+        # RENDERIZAÇÃO CONDICIONAL DAS VISÕES OPERACIONAIS
+        # =========================================================
         if menu == "📋 REPORTE DIÁRIO":
             st.subheader("⚙️ Filtros da Página")
             col_f1, col_f2 = st.columns(2)
@@ -579,7 +585,7 @@ else:
                         engine = obter_engine()
                         with engine.begin() as conn:
                             conn.execute(text("""
-                                INSERT INTO reportes (data_registro, turno, coordenador, ocorrências, maq_analisada, problema, pq1, pq2, pq3, pq4, pq5, oque, quem, quando, status) 
+                                INSERT INTO reportes (data_registro, turno, coordenador, ocorrencias, maq_analisada, problema, pq1, pq2, pq3, pq4, pq5, oque, quem, quando, status) 
                                 VALUES (:data, :turno, :coord, :ocorrencias, :maq, :prob, :p1, :p2, :p3, :p4, :p5, :oque, :quem, :quando, :status)
                             """), {"data": str(data_rep), "turno": turno_rep, "coord": coord_rep, "ocorrencias": txt_ocorrencias, "maq": maq_an, "prob": prob_an, "p1": p1, "p2": p2, "p3": p3, "p4": p4, "p5": p5, "oque": action_oque, "quem": action_quem, "quando": action_quando, "status": status_inicial})
                         st.success("🎉 Reporte alocado com sucesso no Neon SQL!")
@@ -886,7 +892,7 @@ else:
                                 with ce2:
                                     sk_it = st.text_input(f"SKU ({m_b})", value=val_sk, key=f"e_sk_{m_b}").upper()
                                     pr_it = st.number_input(f"Produtividade % ({m_b})", min_value=0.0, max_value=100.0, value=val_pr, step=0.1, key=f"e_pr_{m_b}")
-                                    ls_it = st.number_input(f"Loss % ({m_b})", min_value=0.0, max_value=100.0, value=val_loss, step=0.1, key=f"e_ls_{m_b}")
+                                    ls_it = st.number_input(f"Loss % ({m_b})", min_value=0.0, max_value=100.0, value=val_ls, step=0.1, key=f"e_ls_{m_b}")
                                 with ce3:
                                     pi_it = st.text_input(f"Palete Inicial ({m_b})", value=val_pi, key=f"e_pi_{m_b}").upper()
                                     pf_it = st.text_input(f"Palete Final ({m_b})", value=val_pf, key=f"e_pf_{m_b}").upper()
