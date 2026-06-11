@@ -413,7 +413,7 @@ if uploaded_file:
         st.markdown(html_grid + '</div>', unsafe_allow_html=True)
 
     # =========================================================
-    # ABA: ANÁLISE SEMANAL (CORRIGIDA)
+    # ABA: ANÁLISE SEMANAL
     # =========================================================
     elif menu == "📋 ANÁLISE SEMANAL":
         st.sidebar.subheader("Filtros Board")
@@ -432,7 +432,6 @@ if uploaded_file:
             <p style="color:#64748b; font-size:1rem;">Período: {periodo_b[0].strftime('%d/%m')} a {periodo_b[1].strftime('%d/%m/%Y')}</p></div>""", unsafe_allow_html=True)
 
         m_v = (df_b["Run Time"].sum()/df_b["Horário Padrão"].replace(0,1).sum()*100)
-        # CORREÇÃO: Aspas unificadas para aspas duplas na linha abaixo para consertar o SyntaxError
         l_v = ((df_b["Machine Counter"].sum()-df_b["Peças Estoque - Ajuste"].sum())/df_b["Machine Counter"].replace(0,1).sum()*100)
         pecas_v = df_b["Peças Estoque - Ajuste"].sum()
 
@@ -529,8 +528,8 @@ if uploaded_file:
             st.info("Nenhum registro encontrado no banco de dados local.")
         else:
             f_col1, f_col2 = st.columns(2)
-            with f_col1: filtro_status = st.multiselect("Filtrar por Status", df_db['status'].unique(), default=df_db['status'].unique())
-            with f_col2: filtro_turno = st.multiselect("Filtrar por Turno", df_db['turno'].unique(), default=df_db['turno'].unique())
+            with f_col1: filtro_status = st.multiselect("Filtrar por Status", df_db['status'].unique(), default=df_db['status'].unique(), key='ds1')
+            with f_col2: filtro_turno = st.multiselect("Filtrar por Turno", df_db['turno'].unique(), default=df_db['turno'].unique(), key='dt1')
             df_filtrado_db = df_db[(df_db['status'].isin(filtro_status)) & (df_db['turno'].isin(filtro_turno))].copy()
             
             def colorir_linhas_por_status(row):
@@ -691,7 +690,6 @@ if uploaded_file:
                     st.write("**Editar os 5 Porquês:**")
                     ep1 = st.text_input("1º Por que?", value=str(row_s['pq1']), key='ep1')
                     ep2 = st.text_input("2º Por que?", value=str(row_s['pq2']), key='ep2')
-                    # FIX: Corrigido uso para row_s na linha abaixo para manter escopo correto da aba semanal
                     ep3 = st.text_input("3º Por que?", value=str(row_s['pq3']), key='ep3')
                     ep4 = st.text_input("4º Por que?", value=str(row_s['pq4']), key='ep4')
                     ep5 = st.text_input("5º Por que?", value=str(row_s['pq5']), key='ep5')
@@ -712,7 +710,7 @@ if uploaded_file:
                             """, (es_pior, es_status, es_maq, ep1, ep2, ep3, ep4, ep5, ep5, e_oque, e_quem, e_quando, int(id_sel_sem)))
                             conn.commit(); conn.close()
                             st.session_state['mostrar_edicao_semanal'] = False
-                            st.success("🎉 Dados atualizados!")
+                            st.success("🎉 Dados updated!")
                             st.rerun()
                     with btn_col2:
                         if st.button("❌ DELETAR ANÁLISE SEMANAL", type="primary", use_container_width=True):
@@ -725,7 +723,7 @@ if uploaded_file:
                             st.rerun()
 
     # =========================================================
-    # ABA: APRESENTAÇÃO SEMANAL
+    # ABA: APRESENTAÇÃO SEMANAL (CORREÇÃO DE ESCOPO DE SELEÇÃO POR DATA)
     # =========================================================
     elif menu == "📊 APRESENTAÇÃO SEMANAL":
         st.markdown("<h2 style='text-align:center;'>📊 Reunião Geral de Fechamento & Apresentação Semanal</h2>", unsafe_allow_html=True)
@@ -743,7 +741,7 @@ if uploaded_file:
         
         st.markdown(f"""<div style="background-color:#f1f5f9; padding:15px; border-radius:10px; border-left:6px solid #10b981; margin-bottom:15px;">
             <h3 style='margin:0; color:#0f172a;'>EXIBIÇÃO INTEGRADA — MÁQUINA {maq_ap} (TURNO {turno_ap})</h3>
-            <p style='margin:0; color:#64748b;'>Análise estatística cruzada com o banco de dados de ações de campo.</p></div>""", unsafe_allow_html=True)
+            <p style='margin:0; color:#64748b;'>Análise estatística cruzada com o banco de dados vinculada estritamente ao período selecionado.</p></div>""", unsafe_allow_html=True)
             
         c_kpi1, c_kpi2, c_kpi3 = st.columns(3)
         mov_sem = (df_ap_maq["Run Time"].sum() / df_ap_maq["Horário Padrão"].replace(0,1).sum() * 100)
@@ -754,10 +752,13 @@ if uploaded_file:
         with c_kpi2: st.plotly_chart(mini_gauge("Loss Semanal", loss_sem, "#e74c3c", 5, 140), use_container_width=True)
         with c_kpi3: st.markdown(f'<div class="metric-card" style="height:110px;"><div class="metric-title">Volume Realizado Semanal</div><div class="metric-value" style="font-size:1.8rem; margin-top:10px;">{fmt(pecas_sem)}</div></div>', unsafe_allow_html=True)
         
+        # FIX: Consulta SQL modificada para filtrar obrigatoriamente a data_registro entre o range do periodo_ap da tela
         conn = sqlite3.connect('reportes_turno.db')
         df_query_db = pd.read_sql_query("""
-            SELECT * FROM analises_semanais WHERE maquina = ? AND turno = ? ORDER BY data_registro DESC LIMIT 1
-        """, conn, params=(maq_ap, turno_ap))
+            SELECT * FROM analises_semanais 
+            WHERE maquina = ? AND turno = ? AND data_registro >= ? AND data_registro <= ?
+            ORDER BY data_registro DESC LIMIT 1
+        """, conn, params=(maq_ap, turno_ap, str(periodo_ap[0]), str(periodo_ap[1])))
         conn.close()
         
         col_la, col_lb = st.columns([2, 1])
@@ -779,7 +780,7 @@ if uploaded_file:
 
         st.markdown("<div class='section-header'>Análise Causa Raiz Realizada pelos Operadores (Puxada do Banco de Dados)</div>", unsafe_allow_html=True)
         if df_query_db.empty:
-            st.warning(f"⚠️ Nenhuma análise técnica foi lançada no banco de dados para a Máquina {maq_ap} no turno {turno_ap}. Peça para o operador preencher na aba 'Lançar Análise Semanal'.")
+            st.warning(f"⚠️ Nenhuma análise técnica foi cadastrada no banco de dados para a Máquina {maq_ap} no turno {turno_ap} para o período de {periodo_ap[0].strftime('%d/%m')} até {periodo_ap[1].strftime('%d/%m/%Y')}.")
         else:
             dados_db_pior = df_query_db.iloc[0]
             st.markdown(f"""
