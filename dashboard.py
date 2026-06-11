@@ -103,6 +103,10 @@ if 'usuario_logado' not in st.session_state:
 if 'cargo_logado' not in st.session_state:
     st.session_state['cargo_logado'] = None
 
+# Contador para resetar a tela de cadastro após sucesso
+if 'contador_cadastro' not in st.session_state:
+    st.session_state['contador_cadastro'] = 0
+
 # --- INICIALIZAÇÃO DE ESTADOS DO STREAMLIT ---
 if 'mostrar_edicao' not in st.session_state:
     st.session_state['mostrar_edicao'] = False
@@ -127,7 +131,7 @@ def fmt(valor):
     except:
         return str(valor)
 
-# --- CORREÇÃO DO NAMEERROR: FUNÇÃO GLOBAL DO GRÁFICO GAUGE ---
+# --- FUNÇÃO GLOBAL DO GRÁFICO GAUGE ---
 def mini_gauge(label, value, color, target, height=150):
     fig = go.Figure(go.Indicator(
         mode="gauge+number", value=value,
@@ -285,11 +289,14 @@ if not st.session_state['autenticado']:
                     st.error("Usuário ou senha incorretos.")
                     
     with col_cadastro:
+        # Chave dinâmica para forçar a limpeza total do bloco de cadastro
+        v_cad = st.session_state['contador_cadastro']
+        
         st.markdown("<div class='section-header'>📝 AUTO CADASTRO OPERACIONAL</div>", unsafe_allow_html=True)
-        cad_user = st.text_input("Defina seu Login", key="cad_u").strip().lower()
-        cad_senha = st.text_input("Defina sua Senha", type="password", key="cad_s")
-        cad_conf_senha = st.text_input("Confirme sua Senha", type="password", key="cad_cs")
-        cad_cargo = st.selectbox("Selecione seu Cargo", ["Gerente", "Coordenador", "Analista", "Operador", "Menor Aprendiz", "Assistente"])
+        cad_user = st.text_input("Defina seu Login", key=f"cad_u_{v_cad}").strip().lower()
+        cad_senha = st.text_input("Defina sua Senha", type="password", key=f"cad_s_{v_cad}")
+        cad_conf_senha = st.text_input("Confirme sua Senha", type="password", key=f"cad_cs_{v_cad}")
+        cad_cargo = st.selectbox("Selecione seu Cargo", ["Gerente", "Coordenador", "Analista", "Operador", "Menor Aprendiz", "Assistente"], key=f"cad_c_{v_cad}")
         
         if st.button("💾 REGISTRAR MEU USUÁRIO", use_container_width=True):
             if not cad_user or not cad_senha or not cad_conf_senha:
@@ -303,7 +310,11 @@ if not st.session_state['autenticado']:
                         conn.execute(text("""
                             INSERT INTO usuarios (login, senha, cargo) VALUES (:login, :senha, :cargo)
                         """), {"login": cad_user, "senha": hash_senha(cad_senha), "cargo": cad_cargo})
+                    
+                    # Altera o estado para limpar o formulário e recarrega
+                    st.session_state['contador_cadastro'] += 1
                     st.success("🎉 Cadastro realizado com sucesso! Utilize o painel ao lado para fazer o login.")
+                    st.rerun()
                 except Exception as e:
                     st.error("Este nome de usuário já está sendo utilizado no sistema.")
 
@@ -311,7 +322,6 @@ if not st.session_state['autenticado']:
 # SISTEMA PRINCIPAL (LIBERADO APÓS LOGAR)
 # =========================================================
 else:
-    # --- CORREÇÃO DE CHAVE: MAPEAMENTO DO CARGO DA SESSÃO ---
     cargo = st.session_state['cargo_logado']
     
     todas_abas = [
@@ -672,7 +682,7 @@ else:
                     else:
                         engine = obter_engine()
                         with engine.begin() as conn:
-                            conn.execute(text("INSERT INTO analises_semanais (data_registro, turno, maquina, pior_parada, pq1, pq2, pq3, pq4, pq5, causa_raiz, plano_acao, prazo, responsavel, status) VALUES (:data, :turno, :maq, :pior, :p1, :p2, :p3, :p4, :p5, :causa, :plano, :prazo, :resp, :status)"), {"data": str(semana_ref), "turno": turno_sem, "maq": maq_sem, "pior": pior_parada_sem, "p1": spq1, "p2": spq2, "p3": spq3, "p4": spq4, "p5": spq5, "causa": spq5, "plano": sa_oque, "prazo": sa_quando, "resp": sa_quem, "status": sa_status})
+                            conn.execute(text("INSERT INTO analises_semanais (data_registro, turno, maquina, pior_parada, pq1, pq2, pq3, pq4, pq5, causa_raiz, plano_acao, prazo, responsavel, status) VALUES (:data, :turn, :maq, :pior, :p1, :p2, :p3, :p4, :p5, :causa, :plano, :prazo, :resp, :status)"), {"data": str(semana_ref), "turn": turno_sem, "maq": maq_sem, "pior": pior_parada_sem, "p1": spq1, "p2": spq2, "p3": spq3, "p4": spq4, "p5": spq5, "causa": spq5, "plano": sa_oque, "prazo": sa_quando, "resp": sa_quem, "status": sa_status})
                         st.success("🎉 Análise semanal gravada na nuvem!")
 
         elif menu == "📋 ACOMP. ANÁLISES SEMANAIS":
@@ -706,7 +716,7 @@ else:
                         row_s = df_db_sem[df_db_sem['id'] == id_sel_sem].iloc[0]
                         esc1, esc2, esc3 = st.columns(3)
                         with esc1: es_pior = st.text_input("Editar Pior Parada", value=str(row_s['pior_parada']))
-                        with esc2: es_status = st.selectbox("Editar Status", ["Pendente", "Em Andamento", "Resolvido"], index=["Pendente", "Em Andamento", "Resolvido"].index(row_s['status']), key='status_ed_sem')
+                        with ec2: es_status = st.selectbox("Editar Status", ["Pendente", "Em Andamento", "Resolvido"], index=["Pendente", "Em Andamento", "Resolvido"].index(row_s['status']), key='status_ed_sem')
                         with esc3: es_maq = st.text_input("Editar Máquina", value=str(row_s['maquina'])).upper()
                         ep1 = st.text_input("1º Por que?", value=str(row_s['pq1']), key='ep1')
                         ep2 = st.text_input("2º Por que?", value=str(row_s['pq2']), key='ep2')
@@ -892,7 +902,7 @@ else:
                                 with ce2:
                                     sk_it = st.text_input(f"SKU ({m_b})", value=val_sk, key=f"e_sk_{m_b}").upper()
                                     pr_it = st.number_input(f"Produtividade % ({m_b})", min_value=0.0, max_value=100.0, value=val_pr, step=0.1, key=f"e_pr_{m_b}")
-                                    ls_it = st.number_input(f"Loss % ({m_b})", min_value=0.0, max_value=100.0, value=val_ls, step=0.1, key=f"e_ls_{m_b}")
+                                    ls_it = st.number_input(f"Loss % ({m_b})", min_value=0.0, max_value=100.0, value=val_loss, step=0.1, key=f"e_ls_{m_b}")
                                 with ce3:
                                     pi_it = st.text_input(f"Palete Inicial ({m_b})", value=val_pi, key=f"e_pi_{m_b}").upper()
                                     pf_it = st.text_input(f"Palete Final ({m_b})", value=val_pf, key=f"e_pf_{m_b}").upper()
