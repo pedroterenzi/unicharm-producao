@@ -277,7 +277,6 @@ if not st.session_state['autenticado']:
     st.markdown("<h1 style='text-align:center; color:#10b981; font-weight:900; margin-top:40px;'>🏭 INDUSTRIAL ANALYTICS HUB</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align:center; color:#64748b;'>Selecione a opção desejada para entrar no ecossistema da produção.</p>", unsafe_allow_html=True)
     
-    # Substituição das colunas pelas abas limpas na tela
     col_centro = st.columns([1, 2, 1])[1]
     
     with col_centro:
@@ -313,7 +312,13 @@ if not st.session_state['autenticado']:
             cad_user = st.text_input("Defina seu Login", key=f"cad_u_{v_cad}").strip().lower()
             cad_senha = st.text_input("Defina sua Senha (Mínimo 8 caracteres)", type="password", key=f"cad_s_{v_cad}")
             cad_conf_senha = st.text_input("Confirme sua Senha", type="password", key=f"cad_cs_{v_cad}")
-            cad_cargo = st.selectbox("Selecione seu Cargo", ["Gerente", "Coordenador", "Analista", "Operador", "Menor Aprendiz", "Assistente"], key=f"cad_c_{v_cad}")
+            
+            # 🟢 ADICIONADO O CARGO 'TÉCNICO DE PRODUÇÃO' NA LISTA SELETOÇÃO
+            cad_cargo = st.selectbox(
+                "Selecione seu Cargo", 
+                ["Gerente", "Coordenador", "Analista", "Técnico de Production", "Operador", "Menor Aprendiz", "Assistente"], 
+                key=f"cad_c_{v_cad}"
+            )
             
             # BLOQUEIO OPERACIONAL DE SENHA FRACA
             lista_erros_senha = validar_forca_senha(cad_senha) if cad_senha else []
@@ -359,11 +364,13 @@ else:
         "📋 NIPPO COORDENADORES"
     ]
     
+    # PRIVILÉGIOS DE ACESSO DO CARGO
     if cargo == "Operador":
         abas_permitidas = ["📝 LANÇAR ANÁLISE SEMANAL", "📊 APRESENTAÇÃO SEMANAL"]
     elif cargo in ["Menor Aprendiz", "Assistente"]:
         abas_permitidas = [a for a in todas_abas if a not in ["📊 ACOMPANHAMENTO", "📋 ACOMP. ANÁLISES SEMANAIS", "📋 NIPPO COORDENADORES"]]
     else:
+        # Gerente, Coordenador, Analista e o novo cargo "Técnico de Production" têm acesso a todas as visões
         abas_permitidas = todas_abas
 
     # --- SIDEBAR ---
@@ -623,7 +630,7 @@ else:
                         engine = obter_engine()
                         with engine.begin() as conn:
                             conn.execute(text("""
-                                INSERT INTO reportes (data_registro, turno, coordenador, ocorrências, maq_analisada, problema, pq1, pq2, pq3, pq4, pq5, oque, quem, quando, status) 
+                                INSERT INTO reportes (data_registro, turno, coordenador, ocorrencias, maq_analisada, problema, pq1, pq2, pq3, pq4, pq5, oque, quem, quando, status) 
                                 VALUES (:data, :turno, :coord, :ocorrencias, :maq, :prob, :p1, :p2, :p3, :p4, :p5, :oque, :quem, :quando, :status)
                             """), {"data": str(data_rep), "turno": turno_rep, "coord": coord_rep, "ocorrencias": txt_ocorrencias, "maq": maq_an, "prob": prob_an, "p1": p1, "p2": p2, "p3": p3, "p4": p4, "p5": p5, "oque": action_oque, "quem": action_quem, "quando": action_quando, "status": status_inicial})
                         st.success("🎉 Reporte alocado com sucesso no Neon SQL!")
@@ -933,7 +940,7 @@ else:
                                     ls_it = st.number_input(f"Loss % ({m_b})", min_value=0.0, max_value=100.0, value=val_loss, step=0.1, key=f"e_ls_{m_b}")
                                 with ce3:
                                     pi_it = st.text_input(f"Palete Inicial ({m_b})", value=val_pi, key=f"e_pi_{m_b}").upper()
-                                    pf_it = st.text_input(f"Palete Final ({m_b})", value=val_pfim, key=f"e_pf_{m_b}").upper()
+                                    pf_it = st.text_input(f"Palete Final ({m_b})", value=val_pf, key=f"e_pf_{m_b}").upper()
                                     tt_it = st.number_input(f"Total Ordem ({m_b})", min_value=0, value=val_tt, step=1, key=f"e_tt_{m_b}")
                             mapa_edicao_final[m_b] = {"id": id_reg, "itens": tx_it, "sku": sk_it, "prod": pr_it, "loss": ls_it, "pal_ini": pi_it, "pal_fim": pf_it, "tot": tt_it}
                         
