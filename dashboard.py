@@ -330,7 +330,7 @@ else:
         return True
 
     # =========================================================
-    # ABA: REPORTE DIÁRIO
+    # ABA: REPORTE DIÁRIO (COM COMPARTILHAR GMAIL LIDERANÇA)
     # =========================================================
     if menu == "📋 REPORTE DIÁRIO":
         if verificar_arquivo_carregado():
@@ -362,6 +362,50 @@ else:
                     <div class="metric-card"><div class="metric-title">Meta Geral do Mês Completo</div><div class="metric-value" style="color:#10b981">{fmt(m_total_mes)}</div></div>
                 </div>
             """, unsafe_allow_html=True)
+
+            # --- NOVO BLOCO: REPORTAR FECHAMENTO DIÁRIO VIA GMAIL LIDERANÇA ---
+            st.markdown("<div class='section-header'>📧 NOTIFICAR STATUS E GAPS DA PRODUÇÃO (GMAIL LIDERANÇA UNICHARM)</div>", unsafe_allow_html=True)
+            with st.expander("📢 ENVIAR REPORT DIÁRIO PARA A DIRETORIA E EQUIPE", expanded=False):
+                st.markdown("<p style='font-size:0.85rem; color:#64748b;'>Clique no botão abaixo para exportar os KPIs consolidados da tela direto para a distribuição oficial de acompanhamento da Unicharm.</p>", unsafe_allow_html=True)
+                
+                col_rep_m1, col_rep_m2 = st.columns(2)
+                with col_rep_m1:
+                    lista_lideranca_padrao = "juliana-lima@unicharm.com,maria-sousa@unicharm.com,bruno-torre@unicharm.com,kunihiro-shiomi@unicharm.com,yuya2-fujita@unicharm.com,yoshiyuki-kouzai@unicharm.com,danilo-santos@unicharm.com,luiz-uraguchi@unicharm.com,bruno-felicio@unicharm.com,quenia-martins@unicharm.com,douglas-kurosaki@unicharm.com,erica-rodrigues@unicharm.com,gregorio-santos@unicharm.com,denis-pompollino@unicharm.com,Marcelo-carvalho@unicharm.com,mauricio-oliveira@unicharm.com,paulo-higuchi@unicharm.com,meiriele-francisco@unicharm.com,aline-batiston@unicharm.com,tradutores-br@unicharm.com,alexandre-guerra@unicharm.com,leonardo-arengue@unicharm.com,qualidade-ucb@unicharm.com,luciano-souza@unicharm.com,priscila-albino@unicharm.com,luis-analal@unicharm.com,andre-oliveira@unicharm.com"
+                    lista_para_lideranca = st.text_area("Lista de Distribuição (Injetada)", value=lista_lideranca_padrao, height=70, key="para_lideranca")
+                with col_rep_m2:
+                    assunto_lideranca = st.text_input("Assunto do Report", value=f"Status da Produção & Gaps Operacionais - Ref: {data_ref_reporte.strftime('%d/%m/%Y')}", key="assunto_lideranca")
+                
+                if lista_para_lideranca.strip():
+                    corpo_lideranca = f"Prezados,\n\nSeguem os indicadores consolidados e a situação atual da produção referentes à data {data_ref_reporte.strftime('%d/%m/%Y')}:\n\n"
+                    corpo_lideranca += "==================================================\n"
+                    corpo_lideranca += f"📊 INDICADORES GERAIS ACUMULADOS DO MÊS (MTD)\n"
+                    corpo_lideranca += "==================================================\n"
+                    corpo_lideranca += f"• Movimentação Acumulada Mês: {mov_acum_mes:.1f}% (Meta: 90.0% | Gap vs Meta: {gap_mov:+.1f}%)\n"
+                    corpo_lideranca += f"• Índice de Loss Acumulado Mês: {loss_acum_mes:.1f}% (Meta: 2.5% | Gap vs Meta: {gap_loss:+.1f}%)\n"
+                    corpo_lideranca += f"• Volume de Estoque Realizado MTD: {fmt(estoque_acum_mes)} peças\n\n"
+                    
+                    corpo_lideranca += "==================================================\n"
+                    corpo_lideranca += "🎯 METAS DE PLANEJAMENTO (PLANNER)\n"
+                    corpo_lideranca += "==================================================\n"
+                    corpo_lideranca += f"• Meta Acumulada MTD (Até a Data): {fmt(m_mtd_total)} peças\n"
+                    corpo_lideranca += f"• Meta Geral para o Mês Completo: {fmt(m_total_mes)} peças\n"
+                    corpo_lideranca += "--------------------------------------------------\n\n"
+                    corpo_lideranca += "Solicitamos a todos os responsáveis atenção máxima nos desvios apontados e foco na execução dos planos bloqueantes.\n\n"
+                    corpo_lideranca += f"Atenciosamente,\nIndustrial Analytics Hub\nEmitido por: {st.session_state['usuario_logado'].upper()}"
+                    
+                    from urllib.parse import quote
+                    gmail_lideranca_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={quote(lista_para_lideranca)}&su={quote(assunto_lideranca)}&body={quote(corpo_lideranca)}"
+                    
+                    st.markdown(f"""
+                        <a href="{gmail_lideranca_url}" target="_blank" style="text-decoration: none;">
+                            <div style="background-color: #d93025; color: white; text-align: center; padding: 12px 20px; font-weight: bold; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); cursor: pointer; font-size:0.9rem;">
+                                ✉️ COMPOR REPORT DE PRODUÇÃO NO GMAIL
+                            </div>
+                        </a>
+                    """, unsafe_allow_html=True)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            # --- FIM DO BLOCO DE E-MAIL ---
 
             st.markdown("<div class='section-header'>Gaps / Ganhos de Peças (Comparativo por Máquina)</div>", unsafe_allow_html=True)
             col_t1, col_t2 = st.columns(2)
@@ -551,7 +595,7 @@ else:
                         <p style="color:#10b981; font-size:0.95rem; font-weight:600; margin:5px 0 0 0;">Resultados de {periodo_ap[0].strftime('%d/%m/%Y')} até {periodo_ap[1].strftime('%d/%m/%Y')}</p></div>""", unsafe_allow_html=True)
                     
                     rank_ap = df_ap_all.groupby('Máquina').agg({'Run Time':'sum', 'Horário Padrão':'sum'}).reset_index()
-                    rank_ap['Mov %'] = (rank_ap['Run Time'] / rank_ap['Horãrio Padrão'].replace(0,1) * 100).round(1)
+                    rank_ap['Mov %'] = (rank_ap['Run Time'] / rank_ap['Horário Padrão'].replace(0,1) * 100).round(1)
                     rank_ap = rank_ap.sort_values('Mov %', ascending=False).reset_index(drop=True)
                     rank_ap.index += 1
                     
@@ -905,9 +949,8 @@ else:
             
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- BLOCO: CENTRAL TRANSMISSORA GMAIL PADRONIZADA ---
+            # --- Central de Cobrança Unificada (Gmail) ---
             st.markdown("<div class='section-header'>📧 NOTIFICAR COBRANÇA COLETIVA (GMAIL CORPORATIVO)</div>", unsafe_allow_html=True)
-            
             df_nao_resolvidas = df_unificado[df_unificado['status'].isin(["Pendente", "Em Andamento"])].copy()
             
             if not df_nao_resolvidas.empty:
@@ -1086,7 +1129,7 @@ else:
                     st.caption("ℹ️ Nenhum plano de ação cadastrado para este ofensor.")
 
     # =========================================================
-    # 📋 NIPPO COORDENADORES (COM SISTEMA COMPLETO DE EDIÇÃO E EXCLUSÃO)
+    # 📋 NIPPO COORDENADORES
     # =========================================================
     elif menu == "📋 NIPPO COORDENADORES":
         st.markdown("## 📋 Nippo Coordenadores — Troca de Turno Operacional")
@@ -1132,7 +1175,6 @@ else:
             query_data = st.date_input("Filtrar Data", date.today(), key="q_data")
             engine = obter_engine()
             
-            # Puxa os dados brutos da nuvem
             df_nippo_res = pd.read_sql_query(text("""
                 SELECT id, data as "Data", turno as "Turno", coordenador as "Coordenador", tecnico as "Técnico", 
                        maquina as "Máquina", itens_compartilhar as "Ocorrências", sku as "SKU", 
@@ -1147,15 +1189,13 @@ else:
                 st.markdown("<div class='section-header'>🔍 MESA DE EDIÇÃO EM TEMPO REAL — DIÁRIO NIPPO</div>", unsafe_allow_html=True)
                 st.caption("Dica: Altere os valores diretamente nas células da tabela abaixo e depois clique no botão salvar.")
                 
-                # Transforma o DataFrame em uma planilha editável na tela
                 tabela_editavel_nippo = st.data_editor(
                     df_nippo_res,
-                    disabled=["id", "Data", "Turno", "Máquina"], # Bloqueia chaves que não devem mudar
+                    disabled=["id", "Data", "Turno", "Máquina"], 
                     use_container_width=True,
                     key=f"editor_nippo_remoto_{query_data}"
                 )
                 
-                # Estrutura de botões de controle de salvamento e exclusão
                 btn_np1, btn_np2 = st.columns([2, 1])
                 
                 with btn_np1:
@@ -1183,7 +1223,6 @@ else:
                         st.success("🎉 Alterações do Nippo sincronizadas na nuvem com sucesso!"); st.rerun()
                 
                 with btn_np2:
-                    # Campo e botão para exclusão de linhas com erro crônico
                     id_deletar_nippo = st.number_input("ID para Deletar Definitivamente:", min_value=1, step=1, key="id_del_np")
                     if st.button("❌ EXCLUIR REGISTRO DO BANCO", type="primary", use_container_width=True):
                         if id_deletar_nippo in df_nippo_res["id"].values:
