@@ -772,10 +772,9 @@ else:
                 
                 st.markdown("<br>", unsafe_allow_html=True)
 
-                # --- NOVO BLOCO: CENTRAL TRANSMISSORA GMAIL (NÃO AUTOMÁTICO - SEGURO) ---
+                # --- BLOCO: CENTRAL TRANSMISSORA GMAIL PADRONIZADA (NÃO AUTOMÁTICO - SEGURO) ---
                 st.markdown("<div class='section-header'>📧 NOTIFICAR COBRANÇA COLETIVA (GMAIL CORPORATIVO)</div>", unsafe_allow_html=True)
                 
-                # Filtrando apenas as ações que não estão resolvidas para servir de base para a cobrança
                 df_nao_resolvidas = df_unificado[df_unificado['status'].isin(["Pendente", "Em Andamento"])].copy()
                 
                 if not df_nao_resolvidas.empty:
@@ -783,7 +782,6 @@ else:
                         st.markdown("<p style='font-size:0.85rem; color:#64748b;'>Selecione abaixo as ações com prazo estourado que deseja incluir na cobrança geral para a equipe.</p>", unsafe_allow_html=True)
                         
                         df_nao_resolvidas['Cobrar?'] = False
-                        # Data editor simples apenas para seleção das linhas que vão para o corpo do e-mail
                         df_selecao = st.data_editor(
                             df_nao_resolvidas[['Cobrar?', 'Origem', 'Máquina', 'Problema / Ofensor', 'O que Fazer', 'Responsável', 'Prazo', 'status']],
                             disabled=['Origem', 'Máquina', 'Problema / Ofensor', 'O que Fazer', 'Responsável', 'Prazo', 'status'],
@@ -795,12 +793,13 @@ else:
                         
                         col_mail1, col_mail2 = st.columns(2)
                         with col_mail1:
-                            lista_para = st.text_input("Enviar Para (Separe por vírgula)", placeholder="equipe@unicharm.com, gerente@unicharm.com")
+                            # Lista padrão Unicharm injetada de forma estática
+                            lista_emails_padrao = "pedro-santos@unicharm.com,andre-oliveira@unicharm.com,maria-sousa@unicharm.com,danilo-santos@unicharm.com,mauricio-oliveira@unicharm.com,denis-pompollino@unicharm.com,larissa-fernanda@unicharm.com,douglas-kurosaki@unicharm.com,rogerio-simoes@unicharm.com,kanigia-silva@unicharm.com,wellington-rui@unicharm.com,miltom-oikava@unicharm.com,quenia-martins@unicharm.com"
+                            lista_para = st.text_area("Enviar Para (Lista Unicharm Padronizada)", value=lista_emails_padrao, height=70)
                         with col_mail2:
                             assunto_mail = st.text_input("Assunto do Alerta", value=f"⚠️ ALERTA: Planos de Ação Operacionais Atrasados - {datetime.now().strftime('%d/%m/%Y')}")
                         
                         if not acoes_filtradas.empty and lista_para.strip():
-                            # Construção do corpo do e-mail em formato de texto limpo para leitura direta
                             corpo_texto = "Prezada Equipe,\n\n"
                             corpo_texto += "Identificamos que as seguintes ações operacionais encontram-se com o prazo estourado ou pendentes de conclusão:\n\n"
                             corpo_texto += "--------------------------------------------------\n"
@@ -816,7 +815,6 @@ else:
                             corpo_texto += "\nSolicitamos foco imediato na tratativa e atualização no Industrial Analytics Hub.\n\n"
                             corpo_texto += f"Atenciosamente,\nControle de Processos\nEmitido por: {st.session_state['usuario_logado'].upper()}"
                             
-                            # Codificação URL para parâmetros web seguros
                             from urllib.parse import quote
                             gmail_web_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={quote(lista_para)}&su={quote(assunto_mail)}&body={quote(corpo_texto)}"
                             
@@ -828,14 +826,13 @@ else:
                                 </a>
                             """, unsafe_allow_html=True)
                         else:
-                            st.caption("💡 Para habilitar o botão, selecione ao menos uma ação na tabela acima e preencha o campo de e-mails destino.")
+                            st.caption("💡 Para habilitar o botão, selecione ao menos uma ação na tabela acima.")
                 else:
                     st.success("✨ Sem ações pendentes ou em andamento para cobrar no momento.")
                 
                 st.markdown("<br>", unsafe_allow_html=True)
-                # --- FIM DO BLOCO DE E-MAIL ---
 
-                # --- EXIBIÇÃO ORIGINAL DAS SUAS ABAS DE STATUS (MANTIDAS 100% IGUAIS) ---
+                # --- EXIBIÇÃO ORIGINAL DAS SUAS ABAS DE STATUS ---
                 aba_p, aba_and, aba_ok = st.tabs(["🔴 AÇÕES PENDENTES", "🟡 AÇÕES EM ANDAMENTO", "🟢 AÇÕES REALIZADAS"])
                 colunas_exibicao = ["Origem", "Máquina", "Problema / Ofensor", "O que Fazer", "Responsável", "Prazo"]
                 
@@ -853,10 +850,8 @@ else:
                     df_ok = df_unificado[df_unificado['status'] == "Resolvido"]
                     if df_ok.empty: st.warning("Ainda não temos ações concluídas gravadas na nuvem.")
                     else: st.dataframe(df_ok[colunas_exibicao], use_container_width=True)
-                    
-        # =========================================================
         
- # =========================================================
+# =========================================================
         # 📋 ABA: RELATÓRIO CONSOLIDADO DE OCORRÊNCIAS OPERACIONAIS (COM ENVIO GMAIL)
         # =========================================================
         elif menu == "📋 RELATÓRIO CONSOLIDADO":
@@ -870,20 +865,21 @@ else:
             if df_reportes_dia.empty:
                 st.warning(f"⚠️ Nenhum reporte operacional foi lançado na nuvem para a data {data_matinal.strftime('%d/%m/%Y')}.")
             else:
-                # --- NOVO BLOCO: COMPARTILHAR SUMÁRIO VIA GMAIL ---
+                # --- BLOCO: COMPARTILHAR SUMÁRIO VIA GMAIL PADRONIZADO ---
                 st.markdown("<div class='section-header'>📧 COMPARTILHAR SUMÁRIO MATINAL (GMAIL CORPORATIVO)</div>", unsafe_allow_html=True)
                 
                 with st.expander("📢 GERAR RASCUNHO DO RELATÓRIO NO GMAIL", expanded=False):
-                    st.markdown("<p style='font-size:0.85rem; color:#64748b;'>Insira os destinatários abaixo para gerar o e-mail completo com as ocorrências e os 5 porquês do dia filtrado.</p>", unsafe_allow_html=True)
+                    st.markdown("<p style='font-size:0.85rem; color:#64748b;'>O rascunho completo com as ocorrências e os 5 porquês do dia será injetado para a distribuição oficial abaixo.</p>", unsafe_allow_html=True)
                     
                     col_mat1, col_mat2 = st.columns(2)
                     with col_mat1:
-                        lista_para_matinal = st.text_input("Enviar Para (Separe por vírgula)", placeholder="equipe@unicharm.com, lideranca@unicharm.com", key="para_matinal")
+                        # Mesma lista padrão injetada na caixa de texto do consolidado
+                        lista_emails_padrao = "pedro-santos@unicharm.com,andre-oliveira@unicharm.com,maria-sousa@unicharm.com,danilo-santos@unicharm.com,mauricio-oliveira@unicharm.com,denis-pompollino@unicharm.com,larissa-fernanda@unicharm.com,douglas-kurosaki@unicharm.com,rogerio-simoes@unicharm.com,kanigia-silva@unicharm.com,wellington-rui@unicharm.com,miltom-oikava@unicharm.com,quenia-martins@unicharm.com"
+                        lista_para_matinal = st.text_area("Enviar Para (Lista Unicharm Padronizada)", value=lista_emails_padrao, height=70, key="para_matinal")
                     with col_mat2:
                         assunto_matinal = st.text_input("Assunto do E-mail", value=f"Sumário Matinal - Ocorrências Operacionais - {data_matinal.strftime('%d/%m/%Y')}", key="assunto_matinal")
                     
                     if lista_para_matinal.strip():
-                        # Construção do corpo do e-mail consolidando todas as informações da tela
                         corpo_matinal = f"Prezada Equipe,\n\nSeguem as Ocorrências Operacionais e Análises de Causa Raiz referentes ao dia {data_matinal.strftime('%d/%m/%Y')}:\n\n"
                         corpo_matinal += "==================================================\n"
                         corpo_matinal += "📋 1. SUMÁRIO OPERACIONAL DOS TURNOS\n"
@@ -906,7 +902,6 @@ else:
                             corpo_matinal += f"   4º Por que? {r['pq4']}\n"
                             corpo_matinal += f"   5º Por que? (Causa Raiz): {r['pq5']}\n\n"
                             
-                            # Buscar ações desse reporte específico para listar no e-mail
                             df_ac_email = pd.read_sql_query(text("SELECT oque, quem, quando, status FROM acoes_reportes WHERE reporte_id = :id"), engine, params={"id": int(r['id'])})
                             if not df_ac_email.empty:
                                 corpo_matinal += "   📋 Planos de Ação Vinculados:\n"
@@ -919,7 +914,6 @@ else:
                             
                         corpo_matinal += f"Relatório gerado via Industrial Analytics Hub por: {st.session_state['usuario_logado'].upper()}"
                         
-                        # Codificação segura dos caracteres
                         from urllib.parse import quote
                         gmail_matinal_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={quote(lista_para_matinal)}&su={quote(assunto_matinal)}&body={quote(corpo_matinal)}"
                         
@@ -930,13 +924,10 @@ else:
                                 </div>
                             </a>
                         """, unsafe_allow_html=True)
-                    else:
-                        st.caption("💡 Insira os e-mails acima para liberar o botão de disparo para o Gmail.")
                 
                 st.markdown("<br>", unsafe_allow_html=True)
-                # --- FIM DO BLOCO DE E-MAIL ---
 
-                # --- EXIBIÇÃO VISUAL ORIGINAL DA TELA (MANTIDA 100% IGUAL) ---
+                # --- EXIBIÇÃO VISUAL ORIGINAL DA TELA ---
                 st.markdown("<div class='section-header'>📋 SUMÁRIO EXECUTIVO — PRINCIPAIS OCORRÊNCIAS DO DIA</div>", unsafe_allow_html=True)
                 for _, r in df_reportes_dia.iterrows():
                     st.markdown(f"🔹 **Turno {r['turno']}** (Coordenador: {r['coordenador']})")
@@ -962,7 +953,7 @@ else:
                         st.dataframe(df_ac_sem, use_container_width=True)
                     else:
                         st.caption("ℹ️ Nenhum plano de ação cadastrado para este ofensor.")
-        # =========================================================
+                        
         # 📋 NIPPO COORDENADORES
         # =========================================================
         elif menu == "📋 NIPPO COORDENADORES":
