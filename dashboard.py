@@ -736,11 +736,11 @@ else:
                                 st.session_state['mostrar_edicao_semanal'] = False; st.rerun()
 
 # =========================================================
-        # 📋 ABA: CENTRAL E PAINEL UNIFICADO DE AÇÕES (VIA MAILTO SEGURO)
+        # 📋 ABA: CENTRAL E PAINEL UNIFICADO DE AÇÕES (INTEGRAÇÃO GMAIL COMPATÍVEL UNICHARM)
         # =========================================================
         elif menu == "📋 PAINEL UNIFICADO DE AÇÕES":
             st.markdown("## 📋 Painel Unificado de Ações Industriais (Central de Cobrança)")
-            st.caption("Esta tela compila todas as ações em tempo real e permite gerar cobranças integradas ao seu Gmail/Cliente de e-mail.")
+            st.caption("Esta tela compila em tempo real todas as ações (Reportes Diários + Análises Semanais) divididas por Status.")
             
             engine = obter_engine()
             df_ac_rep = pd.read_sql_query("""
@@ -757,9 +757,9 @@ else:
             if df_unificado.empty: 
                 st.info("Nenhuma ação cadastrada no sistema.")
             else:
-                # --- [Cards de Status mantidos] ---
                 status_cards = ["Pendente", "Em Andamento", "Resolvido"]
                 cores_cards = ["#ef4444", "#f59e0b", "#10b981"]
+                
                 cols_cards = st.columns(3)
                 for i, st_name in enumerate(status_cards):
                     total_st = len(df_unificado[df_unificado['status'] == st_name])
@@ -771,60 +771,91 @@ else:
                     """, unsafe_allow_html=True)
                 
                 st.markdown("<br>", unsafe_allow_html=True)
+
+                # --- NOVO BLOCO: CENTRAL TRANSMISSORA GMAIL (NÃO AUTOMÁTICO - SEGURO) ---
+                st.markdown("<div class='section-header'>📧 NOTIFICAR COBRANÇA COLETIVA (GMAIL CORPORATIVO)</div>", unsafe_allow_html=True)
                 
-                # --- SISTEMA SEGURO DE COBRANÇA (COMPATÍVEL COM GMAIL) ---
-                st.markdown("<div class='section-header'>📧 CENTRAL TRANSMISSORA - GERAÇÃO DE COBRANÇA PARA GMAIL</div>", unsafe_allow_html=True)
-                
+                # Filtrando apenas as ações que não estão resolvidas para servir de base para a cobrança
                 df_nao_resolvidas = df_unificado[df_unificado['status'].isin(["Pendente", "Em Andamento"])].copy()
                 
-                if df_nao_resolvidas.empty:
-                    st.success("✨ Excelente! Não existem ações pendentes ou em andamento para cobrar.")
-                else:
-                    with st.expander("📢 PREPARAR COBRANÇA PARA A EQUIPE", expanded=True):
-                        st.markdown("""
-                            <p style='font-size:0.85rem; color:#64748b;'>
-                            Selecione as ações abaixo e clique no botão para abrir o <b>Gmail</b> (ou e-mail padrão) com o rascunho pronto para envio.
-                            </p>
-                        """, unsafe_allow_html=True)
+                if not df_nao_resolvidas.empty:
+                    with st.expander("📢 SELECIONAR PENDÊNCIAS E GERAR RASCUNHO NO GMAIL", expanded=False):
+                        st.markdown("<p style='font-size:0.85rem; color:#64748b;'>Selecione abaixo as ações com prazo estourado que deseja incluir na cobrança geral para a equipe.</p>", unsafe_allow_html=True)
                         
                         df_nao_resolvidas['Cobrar?'] = False
+                        # Data editor simples apenas para seleção das linhas que vão para o corpo do e-mail
                         df_selecao = st.data_editor(
                             df_nao_resolvidas[['Cobrar?', 'Origem', 'Máquina', 'Problema / Ofensor', 'O que Fazer', 'Responsável', 'Prazo', 'status']],
                             disabled=['Origem', 'Máquina', 'Problema / Ofensor', 'O que Fazer', 'Responsável', 'Prazo', 'status'],
                             use_container_width=True,
-                            key="editor_cobranca_gmail"
+                            key="editor_cobranca_hub"
                         )
                         
-                        acoes_para_cobrar = df_selecao[df_selecao['Cobrar?'] == True]
+                        acoes_filtradas = df_selecao[df_selecao['Cobrar?'] == True]
                         
-                        if not acoes_para_cobrar.empty:
-                            col_e1, col_e2 = st.columns(2)
-                            with col_e1:
-                                email_destinatarios = st.text_area("Lista de E-mails (Separe por vírgula)", placeholder="equipe@unicharm.com")
-                            with col_e2:
-                                assunto_email = st.text_input("Assunto do Alerta", value=f"ALERTA: Planos de Ação Pendentes - {datetime.now().strftime('%d/%m/%Y')}")
+                        col_mail1, col_mail2 = st.columns(2)
+                        with col_mail1:
+                            lista_para = st.text_input("Enviar Para (Separe por vírgula)", placeholder="equipe@unicharm.com, gerente@unicharm.com")
+                        with col_mail2:
+                            assunto_mail = st.text_input("Assunto do Alerta", value=f"⚠️ ALERTA: Planos de Ação Operacionais Atrasados - {datetime.now().strftime('%d/%m/%Y')}")
+                        
+                        if not acoes_filtradas.empty and lista_para.strip():
+                            # Construção do corpo do e-mail em formato de texto limpo para leitura direta
+                            corpo_texto = "Prezada Equipe,\n\n"
+                            corpo_texto += "Identificamos que as seguintes ações operacionais encontram-se com o prazo estourado ou pendentes de conclusão:\n\n"
+                            corpo_texto += "--------------------------------------------------\n"
                             
-                            if email_destinatarios.strip():
-                                # Formato de texto para o e-mail
-                                corpo_texto = "Prezada Equipe,\n\n"
-                                corpo_texto += "Seguem abaixo as ações pendentes que requerem atenção imediata:\n\n"
-                                for _, acao in acoes_para_cobrar.iterrows():
-                                    corpo_texto += f"• MÁQ: {acao['Máquina']} | Ação: {acao['O que Fazer']} | Resp: {acao['Responsável']} | Prazo: {acao['Prazo']}\n"
-                                corpo_texto += "\nFavor atualizar o status no sistema. Obrigado."
+                            for _, acao in acoes_filtradas.iterrows():
+                                corpo_texto += f"📌 [MÁQUINA {acao['Máquina']}] - Tipo: {acao['Origem']}\n"
+                                corpo_texto += f"❌ Ofensor: {acao['Problema / Ofensor']}\n"
+                                corpo_texto += f"🛠️ O que fazer: {acao['O que Fazer']}\n"
+                                corpo_texto += f"👤 Responsável: {acao['Responsável']}\n"
+                                corpo_texto += f"⚠️ Prazo Alocado: {acao['Prazo']}\n"
+                                corpo_texto += "--------------------------------------------------\n"
                                 
-                                from urllib.parse import quote
-                                mailto_url = f"mailto:{email_destinatarios}?subject={quote(assunto_email)}&body={quote(corpo_texto)}"
-                                
-                                st.markdown(f"""
-                                    <a href="{mailto_url}" target="_blank" style="text-decoration: none;">
-                                        <div style="background-color: #d93025; color: white; text-align: center; padding: 14px 20px; font-weight: bold; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); cursor: pointer;">
-                                            🚀 ABRIR NO GMAIL E DISPARAR COBRANÇA
-                                        </div>
-                                    </a>
-                                """, unsafe_allow_html=True)
+                            corpo_texto += "\nSolicitamos foco imediato na tratativa e atualização no Industrial Analytics Hub.\n\n"
+                            corpo_texto += f"Atenciosamente,\nControle de Processos\nEmitido por: {st.session_state['usuario_logado'].upper()}"
+                            
+                            # Codificação URL para parâmetros web seguros
+                            from urllib.parse import quote
+                            gmail_web_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={quote(lista_para)}&su={quote(assunto_mail)}&body={quote(corpo_texto)}"
+                            
+                            st.markdown(f"""
+                                <a href="{gmail_web_url}" target="_blank" style="text-decoration: none;">
+                                    <div style="background-color: #d93025; color: white; text-align: center; padding: 12px 20px; font-weight: bold; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); cursor: pointer; font-size:0.9rem;">
+                                        ✉️ COMPOR COBRANÇA NO GMAIL CORPORATIVO
+                                    </div>
+                                </a>
+                            """, unsafe_allow_html=True)
                         else:
-                            st.info("💡 Marque a caixa 'Cobrar?' na tabela acima.")
-                            
+                            st.caption("💡 Para habilitar o botão, selecione ao menos uma ação na tabela acima e preencha o campo de e-mails destino.")
+                else:
+                    st.success("✨ Sem ações pendentes ou em andamento para cobrar no momento.")
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                # --- FIM DO BLOCO DE E-MAIL ---
+
+                # --- EXIBIÇÃO ORIGINAL DAS SUAS ABAS DE STATUS (MANTIDAS 100% IGUAIS) ---
+                aba_p, aba_and, aba_ok = st.tabs(["🔴 AÇÕES PENDENTES", "🟡 AÇÕES EM ANDAMENTO", "🟢 AÇÕES REALIZADAS"])
+                colunas_exibicao = ["Origem", "Máquina", "Problema / Ofensor", "O que Fazer", "Responsável", "Prazo"]
+                
+                with aba_p:
+                    df_p = df_unificado[df_unificado['status'] == "Pendente"]
+                    if df_p.empty: st.success("🎉 Nenhuma ação pendente! Tudo em andamento ou resolvido.")
+                    else: st.dataframe(df_p[colunas_exibicao], use_container_width=True)
+                    
+                with aba_and:
+                    df_and = df_unificado[df_unificado['status'] == "Em Andamento"]
+                    if df_and.empty: st.info("Nenhuma ação em andamento no momento.")
+                    else: st.dataframe(df_and[colunas_exibicao], use_container_width=True)
+                    
+                with aba_ok:
+                    df_ok = df_unificado[df_unificado['status'] == "Resolvido"]
+                    if df_ok.empty: st.warning("Ainda não temos ações concluídas gravadas na nuvem.")
+                    else: st.dataframe(df_ok[colunas_exibicao], use_container_width=True)
+                    
+        # =========================================================
+        
         # 📋 ABA: RELATÓRIO CONSOLIDADO DE OCORRÊNCIAS OPERACIONAIS
         # =========================================================
         elif menu == "📋 RELATÓRIO CONSOLIDADO":
