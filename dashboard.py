@@ -306,6 +306,7 @@ else:
     elif cargo in ["Menor Aprendiz", "Assistente"]: abas_permitidas = [a for a in todas_abas if a not in ["📊 ACOMPANHAMENTO", "📋 ACOMP. ANÁLISES SEMANAIS", "📋 NIPPO COORDENADORES", "📋 RELATÓRIO CONSOLIDADO"]]
     else: abas_permitidas = todas_abas
 
+    # --- MONTAGEM DO MENU DE NAVEGAÇÃO LATERAL (LIVRE DE ARQUIVO) ---
     with st.sidebar:
         st.markdown(f"👤 <b>{st.session_state['usuario_logado'].upper()}</b> ({cargo.upper()})", unsafe_allow_html=True)
         if st.button("🚪 Sair / Desconectar"):
@@ -314,15 +315,25 @@ else:
         uploaded_file = st.file_uploader("📂 Carregar Excel Produção (.xlsm)", type=["xlsm"])
         up_datas = st.file_uploader("📂 Carregar Excel DATAS (.xlsx)", type=["xlsx"])
         st.markdown("---")
-        if uploaded_file: menu = st.radio("NAVEGAÇÃO", abas_permitidas)
+        menu = st.radio("NAVEGAÇÃO", abas_permitidas)
 
+    # Inicialização padrão dos DataFrames de produção para evitar erros nas abas livres
+    df_order, df_stops = None, None
     if uploaded_file:
         df_order, df_stops = load_data(file_obj=uploaded_file)
 
-        # =========================================================
-        # ABA: REPORTE DIÁRIO (MANTIDA ORIGINAL E COMPLETA)
-        # =========================================================
-        if menu == "📋 REPORTE DIÁRIO":
+    # Auxiliar para validar se o arquivo obrigatório foi carregado nas abas analíticas
+    def verificar_arquivo_carregado():
+        if uploaded_file is None or df_order is None:
+            st.info("💡 Por favor, carregue os arquivos Excel de Produção (.xlsm) na barra lateral esquerda para liberar os gráficos e relatórios desta aba.")
+            return False
+        return True
+
+    # =========================================================
+    # ABA: REPORTE DIÁRIO
+    # =========================================================
+    if menu == "📋 REPORTE DIÁRIO":
+        if verificar_arquivo_carregado():
             st.subheader("⚙️ Filtros da Página")
             col_f1, col_f2 = st.columns(2)
             with col_f1: data_ref_reporte = st.date_input("Data de Referência", df_order['Data'].max().date())
@@ -380,10 +391,11 @@ else:
                 res['Peças Estoque'] = res['Peças Estoque - Ajuste'].apply(fmt)
                 st.table(res[['Categoria','Máquina','Movimentação %','Perda %','Peças Estoque']])
 
-        # =========================================================
-        # ABA: PERFORMANCE (MANTIDA ORIGINAL E COMPLETA)
-        # =========================================================
-        elif menu == "📈 PERFORMANCE":
+    # =========================================================
+    # ABA: PERFORMANCE
+    # =========================================================
+    elif menu == "📈 PERFORMANCE":
+        if verificar_arquivo_carregado():
             st.sidebar.subheader("Filtros")
             f_data = st.sidebar.date_input("Período", [df_order['Data'].min(), df_order['Data'].max()], key='p1')
             f_maq = st.sidebar.multiselect("Máquinas", sorted(df_order['Máquina'].unique()), default=sorted(df_order['Máquina'].unique()), key='m1')
@@ -407,10 +419,11 @@ else:
             with col1: st.plotly_chart(mini_gauge("Movimentação (%)", (df_f['Run Time'].sum()/hp_sum*100 if hp_sum>0 else 0), "#10b981", 90, 280), use_container_width=True)
             with col2: st.plotly_chart(mini_gauge("Loss (%)", ((df_f['Machine Counter'].sum()-df_f['Peças Estoque - Ajuste'].sum())/df_f['Machine Counter'].sum()*100 if df_f['Machine Counter'].sum()>0 else 0), "#e74c3c", 2.5, 280), use_container_width=True)
 
-        # =========================================================
-        # ABA: TOP 10 PARADAS (MANTIDA ORIGINAL E COMPLETA)
-        # =========================================================
-        elif menu == "🛑 TOP 10 PARADAS":
+    # =========================================================
+    # ABA: TOP 10 PARADAS
+    # =========================================================
+    elif menu == "🛑 TOP 10 PARADAS":
+        if verificar_arquivo_carregado():
             st.sidebar.subheader("Filtros Paradas")
             f_data_s = st.sidebar.date_input("Período", [df_stops['Data'].min(), df_stops['Data'].max()], key='p2')
             f_maq_s = st.sidebar.multiselect("Máquinas", sorted(df_stops['Máquina'].unique()), default=sorted(df_stops['Máquina'].unique()), key='m2')
@@ -424,10 +437,11 @@ else:
             st.plotly_chart(px.bar(df_s_f.groupby('Problema')['Minutos'].sum().sort_values().tail(10), orientation='h', title="Minutos Totais", color_discrete_sequence=['#f43f5e']).update_layout(paper_bgcolor='white', plot_bgcolor='white', font={'color':'black'}), use_container_width=True)
             st.plotly_chart(px.bar(df_s_f.groupby('Problema')['QTD'].sum().sort_values().tail(10), orientation='h', title="Frequência (Qtd)", color_discrete_sequence=['#3b82f6']).update_layout(paper_bgcolor='white', plot_bgcolor='white', font={'color':'black'}), use_container_width=True)
 
-        # =========================================================
-        # ABA: CALENDÁRIO (MANTIDA ORIGINAL E COMPLETA)
-        # =========================================================
-        elif menu == "📅 CALENDÁRIO":
+    # =========================================================
+    # ABA: CALENDÁRIO
+    # =========================================================
+    elif menu == "📅 CALENDÁRIO":
+        if verificar_arquivo_carregado():
             mes_sel = st.sidebar.selectbox("Mês", list(calendar.month_name)[1:], index=datetime.now().month-1)
             m_idx = list(calendar.month_name).index(mes_sel) + 1
             df_c = df_order[(df_order['Data'].dt.month == m_idx)]
@@ -449,10 +463,11 @@ else:
                     html_grid += f'<div class="day-card" style="background:{cor}"><span class="day-number">{d}</span><div class="day-status" style="color:{"white" if mov > 0 else "#64748b"}">{mov:.1f}%</div></div>'
             st.markdown(html_grid + '</div>', unsafe_allow_html=True)
 
-        # =========================================================
-        # ABA: ANÁLISE SEMANAL (MANTIDA ORIGINAL E COMPLETA)
-        # =========================================================
-        elif menu == "📋 ANÁLISE SEMANAL":
+    # =========================================================
+    # ABA: ANÁLISE SEMANAL
+    # =========================================================
+    elif menu == "📋 ANÁLISE SEMANAL":
+        if verificar_arquivo_carregado():
             st.sidebar.subheader("Filtros Board")
             maq_b = st.sidebar.selectbox("Máquina", sorted(df_order['Máquina'].unique()))
             turno_b = st.sidebar.multiselect("Turnos", sorted(df_order['Turno'].unique()), default=sorted(df_order['Turno'].unique()), key='tb')
@@ -506,14 +521,14 @@ else:
                 4. Por que? <div class="five-why-line"></div> 5. Por que? <div class="five-why-line"></div>
                 <b>CAUSA RAIZ / PLANO DE AÇÃO:</b> <div class="five-why-line"></div><div class="five-why-line"></div></div>""", unsafe_allow_html=True)
 
-        # =========================================================
-        # 📊 ABA: APRESENTAÇÃO SEMANAL (NOVA ABA OPERACIONAL)
-        # =========================================================
-        elif menu == "📊 APRESENTAÇÃO SEMANAL":
+    # =========================================================
+    # ABA: APRESENTAÇÃO SEMANAL
+    # =========================================================
+    elif menu == "📊 APRESENTAÇÃO SEMANAL":
+        if verificar_arquivo_carregado():
             st.markdown("## 📊 Apresentação Semanal para Operadores (Troca de Turno)")
             st.caption("Esta tela consolida os dados de performance do turno e busca de forma automatizada os 5 Porquês já cadastrados para a pior máquina da semana.")
             
-            # Filtros estruturados para o alinhamento matinal/semanal
             st.subheader("⚙️ Filtros da Reunião Semanal")
             ap_c1, ap_c2, ap_c3 = st.columns(3)
             with ap_c1:
@@ -523,9 +538,7 @@ else:
             with ap_c3:
                 coord_ap = st.text_input("Coordenador da Reunião", value=st.session_state['usuario_logado'].upper() if st.session_state['usuario_logado'] else "").upper()
             
-            # Garante que o intervalo de datas foi completamente inserido antes de rodar os calculos
             if len(periodo_ap) == 2:
-                # Filtrando os dados brutos da produção para o período e turno escolhido
                 df_ap_all = df_order[(df_order['Data'].dt.date >= periodo_ap[0]) & (df_order['Data'].dt.date <= periodo_ap[1]) & (df_order['Turno'] == turno_ap)]
                 df_ap_stops_all = df_stops[(df_stops['Data'].dt.date >= periodo_ap[0]) & (df_stops['Data'].dt.date <= periodo_ap[1]) & (df_stops['Turno'] == turno_ap)]
                 
@@ -537,7 +550,6 @@ else:
                         <h4 style="color:#64748b; margin:5px 0 0 0;">COORDENADOR RESPONSÁVEL: {coord_ap if coord_ap else "NÃO INFORMADO"}</h4>
                         <p style="color:#10b981; font-size:0.95rem; font-weight:600; margin:5px 0 0 0;">Resultados de {periodo_ap[0].strftime('%d/%m/%Y')} até {periodo_ap[1].strftime('%d/%m/%Y')}</p></div>""", unsafe_allow_html=True)
                     
-                    # 1. Montagem do Ranking Semanal de Movimentação do Turno
                     rank_ap = df_ap_all.groupby('Máquina').agg({'Run Time':'sum', 'Horário Padrão':'sum'}).reset_index()
                     rank_ap['Mov %'] = (rank_ap['Run Time'] / rank_ap['Horário Padrão'].replace(0,1) * 100).round(1)
                     rank_ap = rank_ap.sort_values('Mov %', ascending=False).reset_index(drop=True)
@@ -556,13 +568,11 @@ else:
                             </div>
                         """, unsafe_allow_html=True)
                     
-                    # 2. Identificação automática da Pior Máquina (Última do ranking)
                     pior_maquina_turno = str(rank_ap.iloc[-1]['Máquina'])
                     pior_mov_turno = rank_ap.iloc[-1]['Mov %']
                     
                     st.markdown(f"<div class='section-header'>🛑 ANÁLISE DO MAIOR OFENSOR DA SEMANA: MÁQUINA {pior_maquina_turno} (MOV: {pior_mov_turno}%)</div>", unsafe_allow_html=True)
                     
-                    # Filtrando paradas exclusivas da pior máquina mapeada
                     df_pior_maq_stops = df_ap_stops_all[df_ap_stops_all['Máquina'] == pior_maquina_turno]
                     stop_ap_data = df_pior_maq_stops.groupby('Problema')['Minutos'].sum().sort_values(ascending=True).tail(5)
                     
@@ -570,10 +580,8 @@ else:
                     with col_p1:
                         if not stop_ap_data.empty:
                             st.plotly_chart(px.bar(stop_ap_data, orientation='h', text_auto=True, title=f"Top 5 Ofensores em Minutos - Máquina {pior_maquina_turno}", color_discrete_sequence=['#ef4444']).update_layout(height=280, paper_bgcolor='white', plot_bgcolor='white', font={'color':'black'}), use_container_width=True)
-                            pior_parada_detectada = stop_ap_data.index[-1]
                         else:
                             st.info(f"ℹ️ Nenhuma parada registrada no Excel para a Máquina {pior_maquina_turno} neste período.")
-                            pior_parada_detectada = None
                     with col_p2:
                         st.markdown("**Desempenho Geral do Turno:**")
                         tot_mc_ap = df_ap_all['Machine Counter'].sum()
@@ -592,11 +600,9 @@ else:
                             </div>
                         """, unsafe_allow_html=True)
 
-                    # 3. Busca no Banco Remoto dos 5 Porquês Já Cadastrados
                     st.markdown("<div class='section-header'>🧠 LEITURA COMPARTILHADA DOS 5 PORQUÊS (MÉTODO DA CAUSA RAIZ)</div>", unsafe_allow_html=True)
                     
                     engine = obter_engine()
-                    # Query cirúrgica que localiza a análise semanal vinculada àquela pior máquina e turno
                     query_busca_5pq = text("""
                         SELECT id, pior_parada, duracao, pq1, pq2, pq3, pq4, pq5 
                         FROM analises_semanais 
@@ -621,7 +627,6 @@ else:
                         </div>
                         """, unsafe_allow_html=True)
                         
-                        # Buscando o plano de ações corretivas atreladas a esse diagnóstico
                         df_acoes_reuniao = pd.read_sql_query(text("SELECT oque as \"Plano de Ação Corretiva\", quem as \"Responsável\", quando as \"Prazo\", status as \"Status\" FROM acoes_semanais WHERE analise_id = :id"), engine, params={"id": int(reg_5pq['id'])})
                         if not df_acoes_reuniao.empty:
                             st.markdown("##### 📋 Contra-medidas e Planos Bloqueantes Alocados:")
@@ -631,500 +636,501 @@ else:
             else:
                 st.info("💡 Por favor, selecione a data inicial e final do período no filtro acima para gerar os indicadores.")
 
-        # =========================================================
-        # 📝 LANÇAR REPORTE (SENHA E BLOQUEIO DE ENTER ACIDENTAL ATIVADOS)
-        # =========================================================
-        elif menu == "📝 LANÇAR REPORTE":
-            v_rep = st.session_state['chave_form_reporte']
-            st.markdown("## 📝 Lançar Reporte de Turno")
-            with st.form("form_reporte", clear_on_submit=False):
-                c1, c2, c3 = st.columns(3)
-                with c1: data_rep = st.date_input("Data do Turno", datetime.now().date(), key=f"rep_data_{v_rep}")
-                with c2: turno_rep = st.selectbox("Turno", ["T1", "T2", "T3"], key=f"rep_turno_{v_rep}")
-                with c3: coord_rep = st.text_input("Coordenador Responsável", key=f"rep_coord_{v_rep}").upper()
-                
-                st.markdown("<div class='section-header'>1. Principais Ocorrências / Paradas do Turno</div>", unsafe_allow_html=True)
-                txt_ocorrencias = st.text_area("Descreva as ocorrências", height=120, key=f"rep_oc_{v_rep}")
-                
-                st.markdown("<div class='section-header'>2. Análise de Causa Raiz (Top Ofensor)</div>", unsafe_allow_html=True)
-                cc1, cc2, cc3 = st.columns([2, 2, 1])
-                with cc1: maq_an = st.text_input("Máquina Analisada", key=f"rep_maq_{v_rep}").upper()
-                with cc2: prob_an = st.text_input("Problema Foco", key=f"rep_prob_{v_rep}")
-                with cc3: dur_an = st.text_input("Duração Parada (Ex: 45min)", key=f"rep_dur_{v_rep}")
-                
-                p1 = st.text_input("Por que 1?", key=f"rep_p1_{v_rep}")
-                p2 = st.text_input("Por que 2?", key=f"rep_p2_{v_rep}")
-                p3 = st.text_input("Por que 3?", key=f"rep_p3_{v_rep}")
-                p4 = st.text_input("Por que 4?", key=f"rep_p4_{v_rep}")
-                p5 = st.text_input("Por que 5? (Causa Raiz)", key=f"rep_p5_{v_rep}")
-                
-                st.markdown("<div class='section-header'>3. Plano de Ação Imediato Dinâmico</div>", unsafe_allow_html=True)
-                num_acoes = st.number_input("Quantas ações esse problema gerou?", min_value=1, max_value=10, value=1, step=1, key=f"rep_num_{v_rep}")
-                
-                lista_reporte_inputs = []
-                for idx in range(int(num_acoes)):
-                    st.markdown(f"**Ação #{idx+1}**")
-                    ac_c1, ac_c2, ac_c3, ac_c4 = st.columns([3, 2, 2, 2])
-                    with ac_c1: inp_oque = st.text_input(f"O quê (Ação)", key=f"r_oq_{idx}_{v_rep}")
-                    with ac_c2: inp_quem = st.text_input(f"Quem (Responsável)", key=f"r_qm_{idx}_{v_rep}").upper()
-                    with ac_c3: inp_quando = st.text_input(f"Quando (Prazo)", key=f"r_qn_{idx}_{v_rep}")
-                    with ac_c4: inp_status = st.selectbox(f"Status Inicial", ["Pendente", "Em Andamento", "Resolvido"], key=f"r_st_{idx}_{v_rep}")
-                    lista_reporte_inputs.append({"oque": inp_oque, "quem": inp_quem, "quando": inp_quando, "status": inp_status})
-                
-                submit = st.form_submit_button("💾 SALVAR REPORTE NO BANCO DE DADOS")
-                if submit:
-                    vazios = [item for item in lista_reporte_inputs if item["oque"].strip() == "" or item["quem"].strip() == ""]
-                    if not coord_rep or not prob_an or not dur_an:
-                        st.error("⚠️ Preenchimento Obrigatório: Informe o Coordenador, Problema e Duração!")
-                    elif len(vazios) > 0:
-                        st.error("⚠️ Envio Bloqueado: Garanta que todas as caixas de Ação e Responsável geradas estejam preenchidas.")
-                    else:
-                        engine = obter_engine()
-                        with engine.begin() as conn:
-                            result = conn.execute(text("""
-                                INSERT INTO reportes (data_registro, turno, coordenador, ocorrencias, maq_analisada, problema, duracao, pq1, pq2, pq3, pq4, pq5) 
-                                VALUES (:data, :turno, :coord, :ocorrencias, :maq, :prob, :dur, :p1, :p2, :p3, :p4, :p5) RETURNING id
-                            """), {"data": str(data_rep), "turno": turno_rep, "coord": coord_rep, "ocorrencias": txt_ocorrencias, "maq": maq_an, "prob": prob_an, "dur": dur_an, "p1": p1, "p2": p2, "p3": p3, "p4": p4, "p5": p5})
-                            
-                            reporte_id = result.fetchone()[0]
-                            for item in lista_reporte_inputs:
-                                conn.execute(text("INSERT INTO acoes_reportes (reporte_id, oque, quem, quando, status) VALUES (:reporte_id, :oque, :quem, :quando, :status)"), {"reporte_id": reporte_id, "oque": item["oque"], "quem": item["quem"], "quando": item["quando"], "status": item["status"]})
-                        
-                        st.session_state['chave_form_reporte'] += 1
-                        st.success(f"🎉 Registro ID #{reporte_id} salvo com sucesso!"); st.rerun()
-
-        # =========================================================
-        # 📊 ABA: ACOMPANHAMENTO (MESA DE EDIÇÃO COMPLETA DE REPORTES DIÁRIOS)
-        # =========================================================
-        elif menu == "📊 ACOMPANHAMENTO":
-            st.markdown("## 📊 Mesa de Edição — Reportes Diários")
-            engine = obter_engine()
-            df_db = pd.read_sql_query("SELECT id, data_registro, turno, coordenador, maq_analisada, problema, duracao FROM reportes ORDER BY id DESC", engine)
+    # =========================================================
+    # 📝 LANÇAR REPORTE (ABA LIVRE - BANCO DE DADOS DIRETO)
+    # =========================================================
+    elif menu == "📝 LANÇAR REPORTE":
+        v_rep = st.session_state['chave_form_reporte']
+        st.markdown("## 📝 Lançar Reporte de Turno")
+        with st.form("form_reporte", clear_on_submit=False):
+            c1, c2, c3 = st.columns(3)
+            with c1: data_rep = st.date_input("Data do Turno", datetime.now().date(), key=f"rep_data_{v_rep}")
+            with c2: turno_rep = st.selectbox("Turno", ["T1", "T2", "T3"], key=f"rep_turno_{v_rep}")
+            with c3: coord_rep = st.text_input("Coordenador Responsável", key=f"rep_coord_{v_rep}").upper()
             
-            if df_db.empty: st.info("Nenhum reporte estruturado encontrado na nuvem.")
-            else:
-                st.dataframe(df_db, use_container_width=True)
-                id_selecionado = st.number_input("Digite o ID do reporte para editar dados de cabeçalho ou os 5 Porquês:", min_value=1, step=1)
-                
-                if id_selecionado in df_db['id'].values:
-                    if id_selecionado != st.session_state['id_atual']:
-                        st.session_state['id_atual'] = id_selecionado
-                        st.session_state['mostrar_edicao'] = False
-                        
-                    if not st.session_state['mostrar_edicao']:
-                        if st.button("🔍 CARREGAR DADOS COMPLETOS PARA EDIÇÃO"): st.session_state['mostrar_edicao'] = True; st.rerun()
-                    else:
-                        if st.button("🔼 MINIMIZAR FORMULÁRIO"): st.session_state['mostrar_edicao'] = False; st.rerun()
-                            
-                    if st.session_state['mostrar_edicao']:
-                        row_sel = pd.read_sql_query(text("SELECT * FROM reportes WHERE id = :id"), engine, params={"id": int(id_selecionado)}).iloc[0]
-                        
-                        ec1, ec2, ec3 = st.columns(3)
-                        with ec1: ed_coord = st.text_input("Coordenador", value=str(row_sel['coordenador'])).upper()
-                        with ec2: ed_maq = st.text_input("Máquina Analisada", value=str(row_sel['maq_analisada'])).upper()
-                        with ec3: ed_dur = st.text_input("Duração Parada", value=str(row_sel['duracao']))
-                        
-                        ed_oc = st.text_area("Principais Ocorrências do Turno", value=str(row_sel['ocorrencias']))
-                        ed_prob = st.text_input("Problema Foco", value=str(row_sel['problema']))
-                        
-                        st.write("**Fluxo de Diagnóstico (5 Porquês):**")
-                        ep1 = st.text_input("Por que 1?", value=str(row_sel['pq1']))
-                        ep2 = st.text_input("Por que 2?", value=str(row_sel['pq2']))
-                        ep3 = st.text_input("Por que 3?", value=str(row_sel['pq3']))
-                        ep4 = st.text_input("Por que 4?", value=str(row_sel['pq4']))
-                        ep5 = st.text_input("Por que 5 (Causa Raiz)?", value=str(row_sel['pq5']))
-                        
-                        st.markdown("#### Planos de Ação Relacionados a esse ID")
-                        df_ac_edit = pd.read_sql_query(text("SELECT id, oque as \"Ação\", quem as \"Responsável\", quando as \"Prazo\", status as \"Status\" FROM acoes_reportes WHERE reporte_id = :id"), engine, params={"id": int(id_selecionado)})
-                        tabela_ed_flow = st.data_editor(df_ac_edit, num_rows="dynamic", column_config={"Status": st.column_config.SelectboxColumn("Status", options=["Pendente", "Em Andamento", "Resolvido"], required=True)}, use_container_width=True, key=f"dt_rep_{id_selecionado}")
-                        
-                        b_c1, b_c2 = st.columns(2)
-                        with b_c1:
-                            if st.button("💾 SALVAR ALTERAÇÕES COMPLETAS"):
-                                with engine.begin() as conn:
-                                    conn.execute(text("UPDATE reportes SET coordenador=:c, ocorrencias=:oc, maq_analisada=:m, problema=:p, duracao=:d, pq1=:p1, pq2=:p2, pq3=:p3, pq4=:p4, pq5=:p5 WHERE id=:id"), {"c": ed_coord, "oc": ed_oc, "m": ed_maq, "p": ed_prob, "d": ed_dur, "p1": ep1, "p2": ep2, "p3": ep3, "p4": ep4, "p5": ep5, "id": int(id_selecionado)})
-                                    conn.execute(text("DELETE FROM acoes_reportes WHERE reporte_id = :id"), {"id": int(id_selecionado)})
-                                    for _, r in tabela_ed_flow.iterrows():
-                                        if str(r["Ação"]).strip() != "":
-                                            conn.execute(text("INSERT INTO acoes_reportes (reporte_id, oque, quem, quando, status) VALUES (:id, :oq, :qm, :qn, :st)"), {"id": int(id_selecionado), "oq": r["Ação"], "qm": str(r["Responsável"]).upper(), "qn": r["Prazo"], "st": r["Status"]})
-                                st.session_state['mostrar_edicao'] = False; st.success("Sincronizado!"); st.rerun()
-                        with b_c2:
-                            if st.button("❌ APAGAR DEFINITIVAMENTE", type="primary"):
-                                with engine.begin() as conn: conn.execute(text("DELETE FROM reportes WHERE id = :id"), {"id": int(id_selecionado)})
-                                st.session_state['mostrar_edicao'] = False; st.rerun()
-
-        # =========================================================
-        # 📝 LANÇAR ANÁLISE SEMANAL (VALIDAÇÃO E LIMPEZA CONTRA ENTER)
-        # =========================================================
-        elif menu == "📝 LANÇAR ANÁLISE SEMANAL":
-            v_sem = st.session_state['chave_form_semanal']
-            st.markdown("## 📝 Formulário de Lançamento — Análise Semanal")
-            with st.form("form_analise_semanal", clear_on_submit=False):
-                s1, s2, s3 = st.columns(3)
-                with s1: semana_ref = st.date_input("Semana de Referência", datetime.now().date(), key=f"s_dt_{v_sem}")
-                with s2: turno_sem = st.selectbox("Turno Analisado", ["T1", "T2", "T3"], key=f"s_tr_{v_sem}")
-                with s3: maq_sem = st.selectbox("Máquina Alvo", sorted(df_order['Máquina'].unique()), key=f"s_mq_{v_sem}")
-                pior_parada_sem = st.text_input("Pior Parada Detectada", key=f"s_pr_{v_sem}")
-                dur_sem = st.text_input("Duração Total Parada (Ex: 3h)", key=f"s_dr_{v_sem}")
-                
-                st.markdown("<div class='section-header'>Análise Causa Raiz — Método dos 5 Porquês</div>", unsafe_allow_html=True)
-                spq1 = st.text_input("1º Por que?", key=f"s_p1_{v_sem}")
-                spq2 = st.text_input("2º Por que?", key=f"s_p2_{v_sem}")
-                spq3 = st.text_input("3º Por que?", key=f"s_p3_{v_sem}")
-                spq4 = st.text_input("4º Por que?", key=f"s_p4_{v_sem}")
-                spq5 = st.text_input("5º Por que? (Causa Raiz)", key=f"s_p5_{v_sem}")
-                
-                st.markdown("<div class='section-header'>Plano de Ações Semanais Combinadas</div>", unsafe_allow_html=True)
-                num_acoes_sem = st.number_input("Quantas ações esse ofensor gerou para a semana?", min_value=1, max_value=10, value=1, step=1, key=f"s_nm_{v_sem}")
-                
-                lista_sem_inputs = []
-                for idx in range(int(num_acoes_sem)):
-                    st.markdown(f"**Ação Semanal #{idx+1}**")
-                    sem_c1, sem_c2, sem_c3, sem_c4 = st.columns([3, 2, 2, 2])
-                    with sem_c1: sem_oque = st.text_input(f"O quê (Ação Semanal)", key=f"s_oq_{idx}_{v_sem}")
-                    with sem_c2: sem_quem = st.text_input(f"Quem (Responsável)", key=f"s_qm_{idx}_{v_sem}").upper()
-                    with sem_c3: sem_quando = st.text_input(f"Quando (Prazo)", key=f"s_qn_{idx}_{v_sem}")
-                    with sem_c4: sem_status = st.selectbox(f"Status", ["Pendente", "Em Andamento", "Resolvido"], key=f"s_st_{idx}_{v_sem}")
-                    lista_sem_inputs.append({"oque": sem_oque, "quem": sem_quem, "quando": sem_quando, "status": sem_status})
-                
-                submit_sem = st.form_submit_button("💾 REGISTRAR ANÁLISE SEMANAL NO BANCO")
-                if submit_sem:
-                    vazios_sem = [item for item in lista_sem_inputs if item["oque"].strip() == "" or item["quem"].strip() == ""]
-                    if not pior_parada_sem or not spq5 or not dur_sem:
-                        st.error("⚠️ Preenchimento Obrigatório: Preencha o Ofensor, Causa Raiz e Duração!")
-                    elif len(vazios_sem) > 0:
-                        st.error("⚠️ Envio Bloqueado: Certifique-se de que todas as caixas de Ação Semanal geradas estejam preenchidas.")
-                    else:
-                        engine = obter_engine()
-                        with engine.begin() as conn:
-                            result_sem = conn.execute(text("INSERT INTO analises_semanais (data_registro, turno, maquina, pior_parada, duracao, pq1, pq2, pq3, pq4, pq5, causa_raiz) VALUES (:data, :turn, :maq, :pior, :dur, :p1, :p2, :p3, :p4, :p5, :causa) RETURNING id"), {"data": str(semana_ref), "turn": turno_sem, "maq": maq_sem, "pior": pior_parada_sem, "dur": dur_sem, "p1": spq1, "p2": spq2, "p3": spq3, "p4": spq4, "p5": spq5, "causa": spq5})
-                            analise_id = result_sem.fetchone()[0]
-                            for item in lista_sem_inputs:
-                                conn.execute(text("INSERT INTO acoes_semanais (analise_id, oque, quem, quando, status) VALUES (:analise_id, :oque, :quem, :quando, :status)"), {"analise_id": analise_id, "oque": item["oque"], "quem": item["quem"], "quando": item["quando"], "status": item["status"]})
-                        
-                        st.session_state['chave_form_semanal'] += 1
-                        st.success(f"🎉 Análise Semanal ID #{analise_id} gravada!"); st.rerun()
-
-        # =========================================================
-        # 📋 ACOMP. ANÁLISES SEMANAIS (MESA DE EDIÇÃO DE TÍTULOS E 5PQ)
-        # =========================================================
-        elif menu == "📋 ACOMP. ANÁLISES SEMANAIS":
-            st.markdown("## 📋 Mesa de Edição — Análises Semanais")
-            engine = obter_engine()
-            df_as = pd.read_sql_query("SELECT id, data_registro, turno, maquina, pior_parada, duracao FROM analises_semanais ORDER BY id DESC", engine)
-            if df_as.empty: st.info("Nenhuma análise semanal registrada no banco remoto.")
-            else:
-                st.dataframe(df_as, use_container_width=True)
-                id_sel_sem = st.number_input("Digite o ID da Análise Semanal para editar dados ou os 5 Porquês:", min_value=1, step=1, key='id_num_sem')
-                
-                if id_sel_sem in df_as['id'].values:
-                    if id_sel_sem != st.session_state['id_atual_semanal']:
-                        st.session_state['id_atual_semanal'] = id_sel_sem
-                        st.session_state['mostrar_edicao_semanal'] = False
-                        
-                    if not st.session_state['mostrar_edicao_semanal']:
-                        if st.button("🔍 CARREGAR DADOS DA ANÁLISE"): st.session_state['mostrar_edicao_semanal'] = True; st.rerun()
-                    else:
-                        if st.button("🔼 MINIMIZAR FORMULÁRIO Técnico"): st.session_state['mostrar_edicao_semanal'] = False; st.rerun()
-                            
-                    if st.session_state['mostrar_edicao_semanal']:
-                        row_s = pd.read_sql_query(text("SELECT * FROM analises_semanais WHERE id = :id"), engine, params={"id": int(id_sel_sem)}).iloc[0]
-                        
-                        esc1, esc2, esc3 = st.columns(3)
-                        with esc1: es_pior = st.text_input("Ofensor Semanal", value=str(row_s['pior_parada']))
-                        with esc2: es_maq = st.text_input("Máquina Alvo", value=str(row_s['maquina'])).upper()
-                        with esc3: es_dur = st.text_input("Corrigir Duração Mapeada", value=str(row_s['duracao']))
-                        
-                        sep1 = st.text_input("1º Por que?", value=str(row_s['pq1']))
-                        sep2 = st.text_input("2º Por que?", value=str(row_s['pq2']))
-                        sep3 = st.text_input("3º Por que?", value=str(row_s['pq3']))
-                        sep4 = st.text_input("4º Por que?", value=str(row_s['pq4']))
-                        sep5 = st.text_input("5º Por que? (Causa Raiz)", value=str(row_s['pq5']))
-                        
-                        st.write("**Planos de Ação Relacionados**")
-                        df_ac_sem_edit = pd.read_sql_query(text("SELECT id, oque as \"Ação Semanal\", quem as \"Responsável\", quando as \"Prazo\", status as \"Status\" FROM acoes_semanais WHERE analise_id = :id"), engine, params={"id": int(id_sel_sem)})
-                        tabela_ed_sem_flow = st.data_editor(df_ac_sem_edit, num_rows="dynamic", column_config={"Status": st.column_config.SelectboxColumn("Status", options=["Pendente", "Em Andamento", "Resolvido"], required=True)}, use_container_width=True, key=f"dt_sem_{id_sel_sem}")
-                        
-                        btn_col1, btn_col2 = st.columns(2)
-                        with btn_col1:
-                            if st.button("💾 GRAVAR ALTERAÇÕES DA ANÁLISE"):
-                                with engine.begin() as conn:
-                                    conn.execute(text("UPDATE analises_semanais SET pior_parada=:p, maquina=:m, duracao=:d, pq1=:p1, pq2=:p2, pq3=:p3, pq4=:p4, pq5=:p5, causa_raiz=:c WHERE id=:id"), {"p": es_pior, "m": es_maq, "d": es_dur, "p1": sep1, "p2": sep2, "p3": sep3, "p4": sep4, "p5": sep5, "c": sep5, "id": int(id_sel_sem)})
-                                    conn.execute(text("DELETE FROM acoes_semanais WHERE analise_id = :id"), {"id": int(id_sel_sem)})
-                                    for _, r in tabela_ed_sem_flow.iterrows():
-                                        if str(r["Ação Semanal"]).strip() != "":
-                                            conn.execute(text("INSERT INTO acoes_semanais (analise_id, oque, quem, quando, status) VALUES (:id, :oq, :qm, :qn, :st)"), {"id": int(id_sel_sem), "oq": r["Ação Semanal"], "qm": str(r["Responsável"]).upper(), "qn": r["Prazo"], "st": r["Status"]})
-                                st.session_state['mostrar_edicao_semanal'] = False; st.success("Atualizado!"); st.rerun()
-                        with btn_col2:
-                            if st.button("❌ APAGAR BLOCO SEMANAL", type="primary"):
-                                with engine.begin() as conn: conn.execute(text("DELETE FROM analises_semanais WHERE id = :id"), {"id": int(id_sel_sem)})
-                                st.session_state['mostrar_edicao_semanal'] = False; st.rerun()
-
-        # =========================================================
-        # 📋 ABA: CENTRAL E PAINEL UNIFICADO DE AÇÕES (INTEGRAÇÃO GMAIL COMPATÍVEL UNICHARM)
-        # =========================================================
-        elif menu == "📋 PAINEL UNIFICADO DE AÇÕES":
-            st.markdown("## 📋 Painel Unificado de Ações Industriais (Central de Cobrança)")
-            st.caption("Esta tela compila em tempo real todas as ações (Reportes Diários + Análises Semanais) divididas por Status.")
+            st.markdown("<div class='section-header'>1. Principais Ocorrências / Paradas do Turno</div>", unsafe_allow_html=True)
+            txt_ocorrencias = st.text_area("Descreva as ocorrências", height=120, key=f"rep_oc_{v_rep}")
             
-            engine = obter_engine()
-            df_ac_rep = pd.read_sql_query("""
-                SELECT 'DIÁRIO' as "Origem", r.maq_analisada as "Máquina", r.problema as "Problema / Ofensor", ar.oque as "O que Fazer", ar.quem as "Responsável", ar.quando as "Prazo", ar.status 
-                FROM acoes_reportes ar JOIN reportes r ON ar.reporte_id = r.id
-            """, engine)
-            df_ac_sem = pd.read_sql_query("""
-                SELECT 'SEMANAL' as "Origem", ans.maquina as "Máquina", ans.pior_parada as "Problema / Ofensor", asm.oque as "O que Fazer", asm.quem as "Responsável", asm.quando as "Prazo", asm.status 
-                FROM acoes_semanais asm JOIN analises_semanais ans ON asm.analise_id = ans.id
-            """, engine)
+            st.markdown("<div class='section-header'>2. Análise de Causa Raiz (Top Ofensor)</div>", unsafe_allow_html=True)
+            cc1, cc2, cc3 = st.columns([2, 2, 1])
+            with cc1: maq_an = st.text_input("Máquina Analisada", key=f"rep_maq_{v_rep}").upper()
+            with cc2: prob_an = st.text_input("Problema Foco", key=f"rep_prob_{v_rep}")
+            with cc3: dur_an = st.text_input("Duração Parada (Ex: 45min)", key=f"rep_dur_{v_rep}")
             
-            df_unificado = pd.concat([df_ac_rep, df_ac_sem], ignore_index=True)
+            p1 = st.text_input("Por que 1?", key=f"rep_p1_{v_rep}")
+            p2 = st.text_input("Por que 2?", key=f"rep_p2_{v_rep}")
+            p3 = st.text_input("Por que 3?", key=f"rep_p3_{v_rep}")
+            p4 = st.text_input("Por que 4?", key=f"rep_p4_{v_rep}")
+            p5 = st.text_input("Por que 5? (Causa Raiz)", key=f"rep_p5_{v_rep}")
             
-            if df_unificado.empty: 
-                st.info("Nenhuma ação cadastrada no sistema.")
-            else:
-                status_cards = ["Pendente", "Em Andamento", "Resolvido"]
-                cores_cards = ["#ef4444", "#f59e0b", "#10b981"]
-                
-                cols_cards = st.columns(3)
-                for i, st_name in enumerate(status_cards):
-                    total_st = len(df_unificado[df_unificado['status'] == st_name])
-                    cols_cards[i].markdown(f"""
-                    <div style="background-color:#f8fafc; border:1px solid #e2e8f0; border-top:5px solid {cores_cards[i]}; border-radius:10px; padding:15px; text-align:center; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-                        <h4 style="margin:0; color:#475569; font-size:0.9rem; text-transform:uppercase;">AÇÕES {st_name.upper()}</h4>
-                        <h2 style="margin:5px 0 0 0; color:{cores_cards[i]}; font-weight:900; font-size:2rem;">{total_st}</h2>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("<div class='section-header'>3. Plano de Ação Imediato Dinâmico</div>", unsafe_allow_html=True)
+            num_acoes = st.number_input("Quantas ações esse problema gerou?", min_value=1, max_value=10, value=1, step=1, key=f"rep_num_{v_rep}")
+            
+            lista_reporte_inputs = []
+            for idx in range(int(num_acoes)):
+                st.markdown(f"**Ação #{idx+1}**")
+                ac_c1, ac_c2, ac_c3, ac_c4 = st.columns([3, 2, 2, 2])
+                with ac_c1: inp_oque = st.text_input(f"O quê (Ação)", key=f"r_oq_{idx}_{v_rep}")
+                with ac_c2: inp_quem = st.text_input(f"Quem (Responsável)", key=f"r_qm_{idx}_{v_rep}").upper()
+                with ac_c3: inp_quando = st.text_input(f"Quando (Prazo)", key=f"r_qn_{idx}_{v_rep}")
+                with ac_c4: inp_status = st.selectbox(f"Status Inicial", ["Pendente", "Em Andamento", "Resolvido"], key=f"r_st_{idx}_{v_rep}")
+                lista_reporte_inputs.append({"oque": inp_oque, "quem": inp_quem, "quando": inp_quando, "status": inp_status})
+            
+            submit = st.form_submit_button("💾 SALVAR REPORTE NO BANCO DE DADOS")
+            if submit:
+                vazios = [item for item in lista_reporte_inputs if item["oque"].strip() == "" or item["quem"].strip() == ""]
+                if not coord_rep or not prob_an or not dur_an:
+                    st.error("⚠️ Preenchimento Obrigatório: Informe o Coordenador, Problema e Duração!")
+                elif len(vazios) > 0:
+                    st.error("⚠️ Envio Bloqueado: Garanta que todas as caixas de Ação e Responsável geradas estejam preenchidas.")
+                else:
+                    engine = obter_engine()
+                    with engine.begin() as conn:
+                        result = conn.execute(text("""
+                            INSERT INTO reportes (data_registro, turno, coordenador, ocorrencias, maq_analisada, problema, duracao, pq1, pq2, pq3, pq4, pq5) 
+                            VALUES (:data, :turno, :coord, :ocorrencias, :maq, :prob, :dur, :p1, :p2, :p3, :p4, :p5) RETURNING id
+                        """), {"data": str(data_rep), "turno": turno_rep, "coord": coord_rep, "ocorrencias": txt_ocorrencias, "maq": maq_an, "prob": prob_an, "dur": dur_an, "p1": p1, "p2": p2, "p3": p3, "p4": p4, "p5": p5})
+                        
+                        reporte_id = result.fetchone()[0]
+                        for item in lista_reporte_inputs:
+                            conn.execute(text("INSERT INTO acoes_reportes (reporte_id, oque, quem, quando, status) VALUES (:reporte_id, :oque, :quem, :quando, :status)"), {"reporte_id": reporte_id, "oque": item["oque"], "quem": item["quem"], "quando": item["quando"], "status": item["status"]})
+                    
+                    st.session_state['chave_form_reporte'] += 1
+                    st.success(f"🎉 Registro ID #{reporte_id} salvo com sucesso!"); st.rerun()
 
-                # --- BLOCO: CENTRAL TRANSMISSORA GMAIL PADRONIZADA ---
-                st.markdown("<div class='section-header'>📧 NOTIFICAR COBRANÇA COLETIVA (GMAIL CORPORATIVO)</div>", unsafe_allow_html=True)
-                
-                df_nao_resolvidas = df_unificado[df_unificado['status'].isin(["Pendente", "Em Andamento"])].copy()
-                
-                if not df_nao_resolvidas.empty:
-                    with st.expander("📢 SELECIONAR PENDÊNCIAS E GERAR RASCUNHO NO GMAIL", expanded=False):
-                        st.markdown("<p style='font-size:0.85rem; color:#64748b;'>Selecione abaixo as ações com prazo estourado que deseja incluir na cobrança geral para a equipe.</p>", unsafe_allow_html=True)
+    # =========================================================
+    # 📊 ABA: ACOMPANHAMENTO (ABA LIVRE)
+    # =========================================================
+    elif menu == "📊 ACOMPANHAMENTO":
+        st.markdown("## 📊 Mesa de Edição — Reportes Diários")
+        engine = obter_engine()
+        df_db = pd.read_sql_query("SELECT id, data_registro, turno, coordenador, maq_analisada, problema, duracao FROM reportes ORDER BY id DESC", engine)
+        
+        if df_db.empty: st.info("Nenhum reporte estruturado encontrado na nuvem.")
+        else:
+            st.dataframe(df_db, use_container_width=True)
+            id_selecionado = st.number_input("Digite o ID do reporte para editar dados de cabeçalho ou os 5 Porquês:", min_value=1, step=1)
+            
+            if id_selecionado in df_db['id'].values:
+                if id_selecionado != st.session_state['id_atual']:
+                    st.session_state['id_atual'] = id_selecionado
+                    st.session_state['mostrar_edicao'] = False
+                    
+                if not st.session_state['mostrar_edicao']:
+                    if st.button("🔍 CARREGAR DADOS COMPLETOS PARA EDIÇÃO"): st.session_state['mostrar_edicao'] = True; st.rerun()
+                else:
+                    if st.button("🔼 MINIMIZAR FORMULÁRIO"): st.session_state['mostrar_edicao'] = False; st.rerun()
                         
-                        df_nao_resolvidas['Cobrar?'] = False
-                        df_selecao = st.data_editor(
-                            df_nao_resolvidas[['Cobrar?', 'Origem', 'Máquina', 'Problema / Ofensor', 'O que Fazer', 'Responsável', 'Prazo', 'status']],
-                            disabled=['Origem', 'Máquina', 'Problema / Ofensor', 'O que Fazer', 'Responsável', 'Prazo', 'status'],
-                            use_container_width=True,
-                            key="editor_cobranca_hub"
-                        )
+                if st.session_state['mostrar_edicao']:
+                    row_sel = pd.read_sql_query(text("SELECT * FROM reportes WHERE id = :id"), engine, params={"id": int(id_selecionado)}).iloc[0]
+                    
+                    ec1, ec2, ec3 = st.columns(3)
+                    with ec1: ed_coord = st.text_input("Coordenador", value=str(row_sel['coordenador'])).upper()
+                    with ec2: ed_maq = st.text_input("Máquina Analisada", value=str(row_sel['maq_analisada'])).upper()
+                    with ec3: ed_dur = st.text_input("Duração Parada", value=str(row_sel['duracao']))
+                    
+                    ed_oc = st.text_area("Principais Ocorrências do Turno", value=str(row_sel['ocorrencias']))
+                    ed_prob = st.text_input("Problema Foco", value=str(row_sel['problema']))
+                    
+                    st.write("**Fluxo de Diagnóstico (5 Porquês):**")
+                    ep1 = st.text_input("Por que 1?", value=str(row_sel['pq1']))
+                    ep2 = st.text_input("Por que 2?", value=str(row_sel['pq2']))
+                    ep3 = st.text_input("Por que 3?", value=str(row_sel['pq3']))
+                    ep4 = st.text_input("Por que 4?", value=str(row_sel['pq4']))
+                    ep5 = st.text_input("Por que 5 (Causa Raiz)?", value=str(row_sel['pq5']))
+                    
+                    st.markdown("#### Planos de Ação Relacionados a esse ID")
+                    df_ac_edit = pd.read_sql_query(text("SELECT id, oque as \"Ação\", quem as \"Responsável\", quando as \"Prazo\", status as \"Status\" FROM acoes_reportes WHERE reporte_id = :id"), engine, params={"id": int(id_selecionado)})
+                    tabela_ed_flow = st.data_editor(df_ac_edit, num_rows="dynamic", column_config={"Status": st.column_config.SelectboxColumn("Status", options=["Pendente", "Em Andamento", "Resolvido"], required=True)}, use_container_width=True, key=f"dt_rep_{id_selecionado}")
+                    
+                    b_c1, b_c2 = st.columns(2)
+                    with b_c1:
+                        if st.button("💾 SALVAR ALTERAÇÕES COMPLETAS"):
+                            with engine.begin() as conn:
+                                conn.execute(text("UPDATE reportes SET coordenador=:c, ocorrencias=:oc, maq_analisada=:m, problema=:p, duracao=:d, pq1=:p1, pq2=:p2, pq3=:p3, pq4=:p4, pq5=:p5 WHERE id=:id"), {"c": ed_coord, "oc": ed_oc, "m": ed_maq, "p": ed_prob, "d": ed_dur, "p1": ep1, "p2": ep2, "p3": ep3, "p4": ep4, "p5": ep5, "id": int(id_selecionado)})
+                                conn.execute(text("DELETE FROM acoes_reportes WHERE reporte_id = :id"), {"id": int(id_selecionado)})
+                                for _, r in tabela_ed_flow.iterrows():
+                                    if str(r["Ação"]).strip() != "":
+                                        conn.execute(text("INSERT INTO acoes_reportes (reporte_id, oque, quem, quando, status) VALUES (:id, :oq, :qm, :qn, :st)"), {"id": int(id_selecionado), "oq": r["Ação"], "qm": str(r["Responsável"]).upper(), "qn": r["Prazo"], "st": r["Status"]})
+                            st.session_state['mostrar_edicao'] = False; st.success("Sincronizado!"); st.rerun()
+                    with b_c2:
+                        if st.button("❌ APAGAR DEFINITIVAMENTE", type="primary"):
+                            with engine.begin() as conn: conn.execute(text("DELETE FROM reportes WHERE id = :id"), {"id": int(id_selecionado)})
+                            st.session_state['mostrar_edicao'] = False; st.rerun()
+
+    # =========================================================
+    # 📝 LANÇAR ANÁLISE SEMANAL (ABA LIVRE)
+    # =========================================================
+    elif menu == "📝 LANÇAR ANÁLISE SEMANAL":
+        v_sem = st.session_state['chave_form_semanal']
+        st.markdown("## 📝 Formulário de Lançamento — Análise Semanal")
+        
+        # Como o selectbox de máquinas precisa de uma lista, fornecemos uma padrão caso o Excel não tenha sido aberto
+        lista_maquinas_padrao = sorted(df_order['Máquina'].unique()) if df_order is not None else [str(i) for i in range(1, 8)]
+        
+        with st.form("form_analise_semanal", clear_on_submit=False):
+            s1, s2, s3 = st.columns(3)
+            with s1: semana_ref = st.date_input("Semana de Referência", datetime.now().date(), key=f"s_dt_{v_sem}")
+            with s2: turno_sem = st.selectbox("Turno Analisado", ["T1", "T2", "T3"], key=f"s_tr_{v_sem}")
+            with s3: maq_sem = st.selectbox("Máquina Alvo", lista_maquinas_padrao, key=f"s_mq_{v_sem}")
+            pior_parada_sem = st.text_input("Pior Parada Detectada", key=f"s_pr_{v_sem}")
+            dur_sem = st.text_input("Duração Total Parada (Ex: 3h)", key=f"s_dr_{v_sem}")
+            
+            st.markdown("<div class='section-header'>Análise Causa Raiz — Método dos 5 Porquês</div>", unsafe_allow_html=True)
+            spq1 = st.text_input("1º Por que?", key=f"s_p1_{v_sem}")
+            spq2 = st.text_input("2º Por que?", key=f"s_p2_{v_sem}")
+            spq3 = st.text_input("3º Por que?", key=f"s_p3_{v_sem}")
+            spq4 = st.text_input("4º Por que?", key=f"s_p4_{v_sem}")
+            spq5 = st.text_input("5º Por que? (Causa Raiz)", key=f"s_p5_{v_sem}")
+            
+            st.markdown("<div class='section-header'>Plano de Ações Semanais Combinadas</div>", unsafe_allow_html=True)
+            num_acoes_sem = st.number_input("Quantas ações esse ofensor gerou para a semana?", min_value=1, max_value=10, value=1, step=1, key=f"s_nm_{v_sem}")
+            
+            lista_sem_inputs = []
+            for idx in range(int(num_acoes_sem)):
+                st.markdown(f"**Ação Semanal #{idx+1}**")
+                sem_c1, sem_c2, sem_c3, sem_c4 = st.columns([3, 2, 2, 2])
+                with sem_c1: sem_oque = st.text_input(f"O quê (Ação Semanal)", key=f"s_oq_{idx}_{v_sem}")
+                with sem_c2: sem_quem = st.text_input(f"Quem (Responsável)", key=f"s_qm_{idx}_{v_sem}").upper()
+                with sem_c3: sem_quando = st.text_input(f"Quando (Prazo)", key=f"s_qn_{idx}_{v_sem}")
+                with sem_c4: sem_status = st.selectbox(f"Status", ["Pendente", "Em Andamento", "Resolvido"], key=f"s_st_{idx}_{v_sem}")
+                lista_sem_inputs.append({"oque": sem_oque, "quem": sem_quem, "quando": sem_quando, "status": sem_status})
+            
+            submit_sem = st.form_submit_button("💾 REGISTRAR ANÁLISE SEMANAL NO BANCO")
+            if submit_sem:
+                vazios_sem = [item for item in lista_sem_inputs if item["oque"].strip() == "" or item["quem"].strip() == ""]
+                if not pior_parada_sem or not spq5 or not dur_sem:
+                    st.error("⚠️ Preenchimento Obrigatório: Preencha o Ofensor, Causa Raiz e Duração!")
+                elif len(vazios_sem) > 0:
+                    st.error("⚠️ Envio Bloqueado: Certifique-se de que todas as caixas de Ação Semanal geradas estejam preenchidas.")
+                else:
+                    engine = obter_engine()
+                    with engine.begin() as conn:
+                        result_sem = conn.execute(text("INSERT INTO analises_semanais (data_registro, turno, maquina, pior_parada, duracao, pq1, pq2, pq3, pq4, pq5, causa_raiz) VALUES (:data, :turn, :maq, :pior, :dur, :p1, :p2, :p3, :p4, :p5, :causa) RETURNING id"), {"data": str(semana_ref), "turn": turno_sem, "maq": maq_sem, "pior": pior_parada_sem, "dur": dur_sem, "p1": spq1, "p2": spq2, "p3": spq3, "p4": spq4, "p5": spq5, "causa": spq5})
+                        analise_id = result_sem.fetchone()[0]
+                        for item in lista_sem_inputs:
+                            conn.execute(text("INSERT INTO acoes_semanais (analise_id, oque, quem, quando, status) VALUES (:analise_id, :oque, :quem, :quando, :status)"), {"analise_id": analise_id, "oque": item["oque"], "quem": item["quem"], "quando": item["quando"], "status": item["status"]})
+                    
+                    st.session_state['chave_form_semanal'] += 1
+                    st.success(f"🎉 Análise Semanal ID #{analise_id} gravada!"); st.rerun()
+
+    # =========================================================
+    # 📋 ACOMP. ANÁLISES SEMANAIS (ABA LIVRE)
+    # =========================================================
+    elif menu == "📋 ACOMP. ANÁLISES SEMANAIS":
+        st.markdown("## 📋 Mesa de Edição — Análises Semanais")
+        engine = obter_engine()
+        df_as = pd.read_sql_query("SELECT id, data_registro, turno, maquina, pior_parada, duracao FROM analises_semanais ORDER BY id DESC", engine)
+        if df_as.empty: st.info("Nenhuma análise semanal registrada no banco remoto.")
+        else:
+            st.dataframe(df_as, use_container_width=True)
+            id_sel_sem = st.number_input("Digite o ID da Análise Semanal para editar dados ou os 5 Porquês:", min_value=1, step=1, key='id_num_sem')
+            
+            if id_sel_sem in df_as['id'].values:
+                if id_sel_sem != st.session_state['id_atual_semanal']:
+                    st.session_state['id_atual_semanal'] = id_sel_sem
+                    st.session_state['mostrar_edicao_semanal'] = False
+                    
+                if not st.session_state['mostrar_edicao_semanal']:
+                    if st.button("🔍 CARREGAR DADOS DA ANÁLISE"): st.session_state['mostrar_edicao_semanal'] = True; st.rerun()
+                else:
+                    if st.button("🔼 MINIMIZAR FORMULÁRIO Técnico"): st.session_state['mostrar_edicao_semanal'] = False; st.rerun()
                         
-                        acoes_filtradas = df_selecao[df_selecao['Cobrar?'] == True]
+                if st.session_state['mostrar_edicao_semanal']:
+                    row_s = pd.read_sql_query(text("SELECT * FROM analises_semanais WHERE id = :id"), engine, params={"id": int(id_sel_sem)}).iloc[0]
+                    
+                    esc1, esc2, esc3 = st.columns(3)
+                    with esc1: es_pior = st.text_input("Ofensor Semanal", value=str(row_s['pior_parada']))
+                    with esc2: es_maq = st.text_input("Máquina Alvo", value=str(row_s['maquina'])).upper()
+                    with esc3: es_dur = st.text_input("Corrigir Duração Mapeada", value=str(row_s['duracao']))
+                    
+                    sep1 = st.text_input("1º Por que?", value=str(row_s['pq1']))
+                    sep2 = st.text_input("2º Por que?", value=str(row_s['pq2']))
+                    sep3 = st.text_input("3º Por que?", value=str(row_s['pq3']))
+                    sep4 = st.text_input("4º Por que?", value=str(row_s['pq4']))
+                    sep5 = st.text_input("5º Por que? (Causa Raiz)", value=str(row_s['pq5']))
+                    
+                    st.write("**Planos de Ação Relacionados**")
+                    df_ac_sem_edit = pd.read_sql_query(text("SELECT id, oque as \"Ação Semanal\", quem as \"Responsável\", quando as \"Prazo\", status as \"Status\" FROM acoes_semanais WHERE analise_id = :id"), engine, params={"id": int(id_sel_sem)})
+                    tabela_ed_sem_flow = st.data_editor(df_ac_sem_edit, num_rows="dynamic", column_config={"Status": st.column_config.SelectboxColumn("Status", options=["Pendente", "Em Andamento", "Resolvido"], required=True)}, use_container_width=True, key=f"dt_sem_{id_sel_sem}")
+                    
+                    btn_col1, btn_col2 = st.columns(2)
+                    with btn_col1:
+                        if st.button("💾 GRAVAR ALTERAÇÕES DA ANÁLISE"):
+                            with engine.begin() as conn:
+                                conn.execute(text("UPDATE analises_semanais SET pior_parada=:p, maquina=:m, duracao=:d, pq1=:p1, pq2=:p2, pq3=:p3, pq4=:p4, pq5=:p5, causa_raiz=:c WHERE id=:id"), {"p": es_pior, "m": es_maq, "d": es_dur, "p1": sep1, "p2": sep2, "p3": sep3, "p4": sep4, "p5": sep5, "c": sep5, "id": int(id_sel_sem)})
+                                conn.execute(text("DELETE FROM acoes_semanais WHERE analise_id = :id"), {"id": int(id_sel_sem)})
+                                for _, r in tabela_ed_sem_flow.iterrows():
+                                    if str(r["Ação Semanal"]).strip() != "":
+                                        conn.execute(text("INSERT INTO acoes_semanais (analise_id, oque, quem, quando, status) VALUES (:id, :oq, :qm, :qn, :st)"), {"id": int(id_sel_sem), "oq": r["Ação Semanal"], "qm": str(r["Responsável"]).upper(), "qn": r["Prazo"], "st": r["Status"]})
+                            st.session_state['mostrar_edicao_semanal'] = False; st.success("Atualizado!"); st.rerun()
+                    with btn_col2:
+                        if st.button("❌ APAGAR BLOCO SEMANAL", type="primary"):
+                            with engine.begin() as conn: conn.execute(text("DELETE FROM analises_semanais WHERE id = :id"), {"id": int(id_sel_sem)})
+                            st.session_state['mostrar_edicao_semanal'] = False; st.rerun()
+
+    # =========================================================
+    # 📋 PAINEL UNIFICADO DE AÇÕES (GMAIL DISPONÍVEL IMEDIATAMENTE)
+    # =========================================================
+    elif menu == "📋 PAINEL UNIFICADO DE AÇÕES":
+        st.markdown("## 📋 Painel Unificado de Ações Industriais (Central de Cobrança)")
+        st.caption("Esta tela compila em tempo real todas as ações (Reportes Diários + Análises Semanais) divididas por Status.")
+        
+        engine = obter_engine()
+        df_ac_rep = pd.read_sql_query("""
+            SELECT 'DIÁRIO' as "Origem", r.maq_analisada as "Máquina", r.problema as "Problema / Ofensor", ar.oque as "O que Fazer", ar.quem as "Responsável", ar.quando as "Prazo", ar.status 
+            FROM acoes_reportes ar JOIN reportes r ON ar.reporte_id = r.id
+        """, engine)
+        df_ac_sem = pd.read_sql_query("""
+            SELECT 'SEMANAL' as "Origem", ans.maquina as "Máquina", ans.pior_parada as "Problema / Ofensor", asm.oque as "O que Fazer", asm.quem as "Responsável", asm.quando as "Prazo", asm.status 
+            FROM acoes_semanais asm JOIN analises_semanais ans ON asm.analise_id = ans.id
+        """, engine)
+        
+        df_unificado = pd.concat([df_ac_rep, df_ac_sem], ignore_index=True)
+        
+        if df_unificado.empty: 
+            st.info("Nenhuma ação cadastrada no sistema.")
+        else:
+            status_cards = ["Pendente", "Em Andamento", "Resolvido"]
+            cores_cards = ["#ef4444", "#f59e0b", "#10b981"]
+            
+            cols_cards = st.columns(3)
+            for i, st_name in enumerate(status_cards):
+                total_st = len(df_unificado[df_unificado['status'] == st_name])
+                cols_cards[i].markdown(f"""
+                <div style="background-color:#f8fafc; border:1px solid #e2e8f0; border-top:5px solid {cores_cards[i]}; border-radius:10px; padding:15px; text-align:center; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                    <h4 style="margin:0; color:#475569; font-size:0.9rem; text-transform:uppercase;">AÇÕES {st_name.upper()}</h4>
+                    <h2 style="margin:5px 0 0 0; color:{cores_cards[i]}; font-weight:900; font-size:2rem;">{total_st}</h2>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # --- BLOCO: CENTRAL TRANSMISSORA GMAIL PADRONIZADA ---
+            st.markdown("<div class='section-header'>📧 NOTIFICAR COBRANÇA COLETIVA (GMAIL CORPORATIVO)</div>", unsafe_allow_html=True)
+            
+            df_nao_resolvidas = df_unificado[df_unificado['status'].isin(["Pendente", "Em Andamento"])].copy()
+            
+            if not df_nao_resolvidas.empty:
+                with st.expander("📢 SELECIONAR PENDÊNCIAS E GERAR RASCUNHO NO GMAIL", expanded=False):
+                    st.markdown("<p style='font-size:0.85rem; color:#64748b;'>Selecione abaixo as ações com prazo estourado que deseja incluir na cobrança geral para a equipe.</p>", unsafe_allow_html=True)
+                    
+                    df_nao_resolvidas['Cobrar?'] = False
+                    df_selecao = st.data_editor(
+                        df_nao_resolvidas[['Cobrar?', 'Origem', 'Máquina', 'Problema / Ofensor', 'O que Fazer', 'Responsável', 'Prazo', 'status']],
+                        disabled=['Origem', 'Máquina', 'Problema / Ofensor', 'O que Fazer', 'Responsável', 'Prazo', 'status'],
+                        use_container_width=True,
+                        key="editor_cobranca_hub"
+                    )
+                    
+                    acoes_filtradas = df_selecao[df_selecao['Cobrar?'] == True]
+                    
+                    col_mail1, col_mail2 = st.columns(2)
+                    with col_mail1:
+                        lista_emails_padrao = "pedro-santos@unicharm.com,andre-oliveira@unicharm.com,maria-sousa@unicharm.com,danilo-santos@unicharm.com,mauricio-oliveira@unicharm.com,denis-pompollino@unicharm.com,larissa-fernanda@unicharm.com,douglas-kurosaki@unicharm.com,rogerio-simoes@unicharm.com,kanigia-silva@unicharm.com,wellington-rui@unicharm.com,miltom-oikava@unicharm.com,quenia-martins@unicharm.com"
+                        lista_para = st.text_area("Enviar Para (Lista Unicharm Padronizada)", value=lista_emails_padrao, height=70)
+                    with col_mail2:
+                        assunto_mail = st.text_input("Assunto do Alerta", value=f"⚠️ ALERTA: Planos de Ação Operacionais Atrasados - {datetime.now().strftime('%d/%m/%Y')}")
+                    
+                    if not acoes_filtradas.empty and lista_para.strip():
+                        corpo_texto = "Prezada Equipe,\n\n"
+                        corpo_texto += "Identificamos que as seguintes ações operacionais encontram-se com o prazo estourado ou pendentes de conclusão:\n\n"
+                        corpo_texto += "--------------------------------------------------\n"
                         
-                        col_mail1, col_mail2 = st.columns(2)
-                        with col_mail1:
-                            lista_emails_padrao = "pedro-santos@unicharm.com,andre-oliveira@unicharm.com,maria-sousa@unicharm.com,danilo-santos@unicharm.com,mauricio-oliveira@unicharm.com,denis-pompollino@unicharm.com,larissa-fernanda@unicharm.com,douglas-kurosaki@unicharm.com,rogerio-simoes@unicharm.com,kanigia-silva@unicharm.com,wellington-rui@unicharm.com,miltom-oikava@unicharm.com,quenia-martins@unicharm.com"
-                            lista_para = st.text_area("Enviar Para (Lista Unicharm Padronizada)", value=lista_emails_padrao, height=70)
-                        with col_mail2:
-                            assunto_mail = st.text_input("Assunto do Alerta", value=f"⚠️ ALERTA: Planos de Ação Operacionais Atrasados - {datetime.now().strftime('%d/%m/%Y')}")
-                        
-                        if not acoes_filtradas.empty and lista_para.strip():
-                            corpo_texto = "Prezada Equipe,\n\n"
-                            corpo_texto += "Identificamos que as seguintes ações operacionais encontram-se com o prazo estourado ou pendentes de conclusão:\n\n"
+                        for _, acao in acoes_filtradas.iterrows():
+                            corpo_texto += f"📌 [MÁQUINA {acao['Máquina']}] - Tipo: {acao['Origem']}\n"
+                            corpo_texto += f"❌ Ofensor: {acao['Problema / Ofensor']}\n"
+                            corpo_texto += f"🛠️ O que fazer: {acao['O que Fazer']}\n"
+                            corpo_texto += f"👤 Responsável: {acao['Responsável']}\n"
+                            corpo_texto += f"⚠️ Prazo Alocado: {acao['Prazo']}\n"
                             corpo_texto += "--------------------------------------------------\n"
                             
-                            for _, acao in acoes_filtradas.iterrows():
-                                corpo_texto += f"📌 [MÁQUINA {acao['Máquina']}] - Tipo: {acao['Origem']}\n"
-                                corpo_texto += f"❌ Ofensor: {acao['Problema / Ofensor']}\n"
-                                corpo_texto += f"🛠️ O que fazer: {acao['O que Fazer']}\n"
-                                corpo_texto += f"👤 Responsável: {acao['Responsável']}\n"
-                                corpo_texto += f"⚠️ Prazo Alocado: {acao['Prazo']}\n"
-                                corpo_texto += "--------------------------------------------------\n"
-                                
-                            corpo_texto += "\nSolicitamos foco imediato na tratativa e atualização no Industrial Analytics Hub.\n\n"
-                            corpo_texto += f"Atenciosamente,\nControle de Processos\nEmitido por: {st.session_state['usuario_logado'].upper()}"
-                            
-                            from urllib.parse import quote
-                            gmail_web_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={quote(lista_para)}&su={quote(assunto_mail)}&body={quote(corpo_texto)}"
-                            
-                            st.markdown(f"""
-                                <a href="{gmail_web_url}" target="_blank" style="text-decoration: none;">
-                                    <div style="background-color: #d93025; color: white; text-align: center; padding: 12px 20px; font-weight: bold; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); cursor: pointer; font-size:0.9rem;">
-                                        ✉️ COMPOR COBRANÇA NO GMAIL CORPORATIVO
-                                    </div>
-                                </a>
-                            """, unsafe_allow_html=True)
-                        else:
-                            st.caption("💡 Para habilitar o botão, selecione ao menos uma ação na tabela acima.")
-                else:
-                    st.success("✨ Sem ações pendentes ou em andamento para cobrar no momento.")
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-
-                # --- EXIBIÇÃO ORIGINAL DAS SUAS ABAS DE STATUS ---
-                aba_p, aba_and, aba_ok = st.tabs(["🔴 AÇÕES PENDENTES", "🟡 AÇÕES EM ANDAMENTO", "🟢 AÇÕES REALIZADAS"])
-                colunas_exibicao = ["Origem", "Máquina", "Problema / Ofensor", "O que Fazer", "Responsável", "Prazo"]
-                
-                with aba_p:
-                    df_p = df_unificado[df_unificado['status'] == "Pendente"]
-                    if df_p.empty: st.success("🎉 Nenhuma ação pendente! Tudo em andamento ou resolvido.")
-                    else: st.dataframe(df_p[colunas_exibicao], use_container_width=True)
-                    
-                with aba_and:
-                    df_and = df_unificado[df_unificado['status'] == "Em Andamento"]
-                    if df_and.empty: st.info("Nenhuma ação em andamento no momento.")
-                    else: st.dataframe(df_and[colunas_exibicao], use_container_width=True)
-                    
-                with aba_ok:
-                    df_ok = df_unificado[df_unificado['status'] == "Resolvido"]
-                    if df_ok.empty: st.warning("Ainda não temos ações concluídas gravadas na nuvem.")
-                    else: st.dataframe(df_ok[colunas_exibicao], use_container_width=True)
-
-        # =========================================================
-        # 📋 ABA: RELATÓRIO CONSOLIDADO DE OCORRÊNCIAS OPERACIONAIS (COM ENVIO GMAIL)
-        # =========================================================
-        elif menu == "📋 RELATÓRIO CONSOLIDADO":
-            st.markdown("## 📋 Relatório Consolidado de Ocorrências Operacionais (Sumário Matinal)")
-            data_matinal = st.date_input("Data de Análise dos Turnos", date.today() - timedelta(days=1))
-            st.markdown(f"### 📑 Painel Geral Consolidado — Turnos de {data_matinal.strftime('%d/%m/%Y')}")
-            
-            engine = obter_engine()
-            df_reportes_dia = pd.read_sql_query(text("SELECT * FROM reportes WHERE data_registro = :data ORDER BY turno ASC"), engine, params={"data": str(data_matinal)})
-            
-            if df_reportes_dia.empty:
-                st.warning(f"⚠️ Nenhum reporte operacional foi lançado na nuvem para a data {data_matinal.strftime('%d/%m/%Y')}.")
-            else:
-                # --- BLOCO: COMPARTILHAR SUMÁRIO VIA GMAIL PADRONIZADO ---
-                st.markdown("<div class='section-header'>📧 COMPARTILHAR SUMÁRIO MATINAL (GMAIL CORPORATIVO)</div>", unsafe_allow_html=True)
-                
-                with st.expander("📢 GERAR RASCUNHO DO RELATÓRIO NO GMAIL", expanded=False):
-                    st.markdown("<p style='font-size:0.85rem; color:#64748b;'>O rascunho completo com as ocorrências e os 5 porquês do dia será injetado para a distribuição oficial abaixo.</p>", unsafe_allow_html=True)
-                    
-                    col_mat1, col_mat2 = st.columns(2)
-                    with col_mat1:
-                        lista_emails_padrao = "pedro-santos@unicharm.com,andre-oliveira@unicharm.com,maria-sousa@unicharm.com,danilo-santos@unicharm.com,mauricio-oliveira@unicharm.com,denis-pompollino@unicharm.com,larissa-fernanda@unicharm.com,douglas-kurosaki@unicharm.com,rogerio-simoes@unicharm.com,kanigia-silva@unicharm.com,wellington-rui@unicharm.com,miltom-oikava@unicharm.com,quenia-martins@unicharm.com"
-                        lista_para_matinal = st.text_area("Enviar Para (Lista Unicharm Padronizada)", value=lista_emails_padrao, height=70, key="para_matinal")
-                    with col_mat2:
-                        assunto_matinal = st.text_input("Assunto do E-mail", value=f"Sumário Matinal - Ocorrências Operacionais - {data_matinal.strftime('%d/%m/%Y')}", key="assunto_matinal")
-                    
-                    if lista_para_matinal.strip():
-                        corpo_matinal = f"Prezada Equipe,\n\nSeguem as Ocorrências Operacionais e Análises de Causa Raiz referentes ao dia {data_matinal.strftime('%d/%m/%Y')}:\n\n"
-                        corpo_matinal += "==================================================\n"
-                        corpo_matinal += "📋 1. SUMÁRIO OPERACIONAL DOS TURNOS\n"
-                        corpo_matinal += "==================================================\n\n"
-                        
-                        for _, r in df_reportes_dia.iterrows():
-                            texto_oc = r['ocorrencias'].strip() if r['ocorrencias'] and r['ocorrencias'].strip() else "Nenhuma grande intercorrência anotada no livro de turno."
-                            corpo_matinal += f"🔹 Turno {r['turno']} (Coordenador: {r['coordenador']}):\n{texto_oc}\n\n"
-                            
-                        corpo_matinal += "==================================================\n"
-                        corpo_matinal += "🛑 2. DIAGNÓSTICO 5 PORQUÊS E PLANOS DE AÇÃO\n"
-                        corpo_matinal += "==================================================\n\n"
-                        
-                        for _, r in df_reportes_dia.iterrows():
-                            corpo_matinal += f"⚙️ Turno {r['turno']} — Máquina: {r['maq_analisada']} | Ofensor: {r['problema']}\n"
-                            corpo_matinal += f"⏱️ DURAÇÃO DA PARADA: {r['duracao']}\n\n"
-                            corpo_matinal += f"   1º Por que? {r['pq1']}\n"
-                            corpo_matinal += f"   2º Por que? {r['pq2']}\n"
-                            corpo_matinal += f"   3º Por que? {r['pq3']}\n"
-                            corpo_matinal += f"   4º Por que? {r['pq4']}\n"
-                            corpo_matinal += f"   5º Por que? (Causa Raiz): {r['pq5']}\n\n"
-                            
-                            df_ac_email = pd.read_sql_query(text("SELECT oque, quem, quando, status FROM acoes_reportes WHERE reporte_id = :id"), engine, params={"id": int(r['id'])})
-                            if not df_ac_email.empty:
-                                corpo_matinal += "   📋 Planos de Ação Vinculados:\n"
-                                for _, ac in df_ac_email.iterrows():
-                                    corpo_matinal += f"   • [Ação]: {ac['oque']} | [Resp]: {ac['quem']} | [Prazo]: {ac['quando']} | [Status]: {ac['status']}\n"
-                            else:
-                                corpo_matinal += "   ℹ️ Nenhum plano de ação cadastrado para este ofensor.\n"
-                                
-                            corpo_matinal += "--------------------------------------------------\n\n"
-                            
-                        corpo_matinal += f"Relatório gerado via Industrial Analytics Hub por: {st.session_state['usuario_logado'].upper()}"
+                        corpo_texto += "\nSolicitamos foco imediato na tratativa e atualização no Industrial Analytics Hub.\n\n"
+                        corpo_texto += f"Atenciosamente,\nControle de Processos\nEmitido por: {st.session_state['usuario_logado'].upper()}"
                         
                         from urllib.parse import quote
-                        gmail_matinal_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={quote(lista_para_matinal)}&su={quote(assunto_matinal)}&body={quote(corpo_matinal)}"
+                        gmail_web_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={quote(lista_para)}&su={quote(assunto_mail)}&body={quote(corpo_texto)}"
                         
                         st.markdown(f"""
-                            <a href="{gmail_matinal_url}" target="_blank" style="text-decoration: none;">
+                            <a href="{gmail_web_url}" target="_blank" style="text-decoration: none;">
                                 <div style="background-color: #d93025; color: white; text-align: center; padding: 12px 20px; font-weight: bold; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); cursor: pointer; font-size:0.9rem;">
-                                    ✉️ COMPOR RELATÓRIO MATINAL NO GMAIL
+                                    ✉️ COMPOR COBRANÇA NO GMAIL CORPORATIVO
                                 </div>
                             </a>
                         """, unsafe_allow_html=True)
-                
-                st.markdown("<br>", unsafe_allow_html=True)
+                    else:
+                        st.caption("💡 Para habilitar o botão, selecione ao menos uma ação na tabela acima.")
+            else:
+                st.success("✨ Sem ações pendentes ou em andamento para cobrar no momento.")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
 
-                # --- EXIBIÇÃO VISUAL ORIGINAL DA TELA ---
-                st.markdown("<div class='section-header'>📋 SUMÁRIO EXECUTIVO — PRINCIPAIS OCORRÊNCIAS DO DIA</div>", unsafe_allow_html=True)
-                for _, r in df_reportes_dia.iterrows():
-                    st.markdown(f"🔹 **Turno {r['turno']}** (Coordenador: {r['coordenador']})")
-                    st.info(r['ocorrencias'] if r['ocorrencias'].strip() else "Nenhuma grande intercorrência anotada no livro de turno.")
+            # --- EXIBIÇÃO ORIGINAL DAS SUAS ABAS DE STATUS ---
+            aba_p, aba_and, aba_ok = st.tabs(["🔴 AÇÕES PENDENTES", "🟡 AÇÕES EM ANDAMENTO", "🟢 AÇÕES REALIZADAS"])
+            colunas_exibicao = ["Origem", "Máquina", "Problema / Ofensor", "O que Fazer", "Responsável", "Prazo"]
+            
+            with aba_p:
+                df_p = df_unificado[df_unificado['status'] == "Pendente"]
+                if df_p.empty: st.success("🎉 Nenhuma ação pendente! Tudo em andamento ou resolvido.")
+                else: st.dataframe(df_p[colunas_exibicao], use_container_width=True)
                 
-                st.markdown("<div class='section-header'>🛑 ANÁLISE DOS TOP OFENSORES E DIAGNÓSTICO 5 PORQUÊS</div>", unsafe_allow_html=True)
-                for _, r in df_reportes_dia.iterrows():
-                    st.markdown(f"""
-                    <div class="five-why-box">
-                        <h4 style="color:#059669; margin:0;">⚙️ Turno {r['turno']} — Máquina: {r['maq_analisada']} | Ofensor: {r['problema']}</h4>
-                        <h5 style="color:#e11d48; margin-top:5px; margin-bottom:15px;">⏱ DURAÇÃO DA PARADA: {r['duracao']}</h5>
-                        <div class="five-why-line"><b>1º Por que?</b> {r['pq1']}</div>
-                        <div class="five-why-line"><b>2º Por que?</b> {r['pq2']}</div>
-                        <div class="five-why-line"><b>3º Por que?</b> {r['pq3']}</div>
-                        <div class="five-why-line"><b>4º Por que?</b> {r['pq4']}</div>
-                        <div class="five-why-line"><b>5º Por que? (Causa Raiz)</b> <span style="color:#b91c1c; font-weight:600;">{r['pq5']}</span></div>
-                    </div>
-                    """, unsafe_allow_html=True)
+            with aba_and:
+                df_and = df_unificado[df_unificado['status'] == "Em Andamento"]
+                if df_and.empty: st.info("Nenhuma ação em andamento no momento.")
+                else: st.dataframe(df_and[colunas_exibicao], use_container_width=True)
+                
+            with aba_ok:
+                df_ok = df_unificado[df_unificado['status'] == "Resolvido"]
+                if df_ok.empty: st.warning("Ainda não temos ações concluídas gravadas na nuvem.")
+                else: st.dataframe(df_ok[colunas_exibicao], use_container_width=True)
+
+    # =========================================================
+    # 📋 RELATÓRIO CONSOLIDADO (ABA LIVRE)
+    # =========================================================
+    elif menu == "📋 RELATÓRIO CONSOLIDADO":
+        st.markdown("## 📋 Relatório Consolidado de Ocorrências Operacionais (Sumário Matinal)")
+        data_matinal = st.date_input("Data de Análise dos Turnos", date.today() - timedelta(days=1))
+        st.markdown(f"### 📑 Painel Geral Consolidado — Turnos de {data_matinal.strftime('%d/%m/%Y')}")
+        
+        engine = obter_engine()
+        df_reportes_dia = pd.read_sql_query(text("SELECT * FROM reportes WHERE data_registro = :data ORDER BY turno ASC"), engine, params={"data": str(data_matinal)})
+        
+        if df_reportes_dia.empty:
+            st.warning(f"⚠️ Nenhum reporte operacional foi lançado na nuvem para a data {data_matinal.strftime('%d/%m/%Y')}.")
+        else:
+            # --- BLOCO: COMPARTILHAR SUMÁRIO VIA GMAIL PADRONIZADO ---
+            st.markdown("<div class='section-header'>📧 COMPARTILHAR SUMÁRIO MATINAL (GMAIL CORPORATIVO)</div>", unsafe_allow_html=True)
+            
+            with st.expander("📢 GERAR RASCUNHO DO RELATÓRIO NO GMAIL", expanded=False):
+                st.markdown("<p style='font-size:0.85rem; color:#64748b;'>O rascunho completo com as ocorrências e os 5 porquês do dia será injetado para a distribuição oficial abaixo.</p>", unsafe_allow_html=True)
+                
+                col_mat1, col_mat2 = st.columns(2)
+                with col_mat1:
+                    lista_emails_padrao = "pedro-santos@unicharm.com,andre-oliveira@unicharm.com,maria-sousa@unicharm.com,danilo-santos@unicharm.com,mauricio-oliveira@unicharm.com,denis-pompollino@unicharm.com,larissa-fernanda@unicharm.com,douglas-kurosaki@unicharm.com,rogerio-simoes@unicharm.com,kanigia-silva@unicharm.com,wellington-rui@unicharm.com,miltom-oikava@unicharm.com,quenia-martins@unicharm.com"
+                    lista_para_matinal = st.text_area("Enviar Para (Lista Unicharm Padronizada)", value=lista_emails_padrao, height=70, key="para_matinal")
+                with col_mat2:
+                    assunto_matinal = st.text_input("Assunto do E-mail", value=f"Sumário Matinal - Ocorrências Operacionais - {data_matinal.strftime('%d/%m/%Y')}", key="assunto_matinal")
+                
+                if lista_para_matinal.strip():
+                    corpo_matinal = f"Prezada Equipe,\n\nSeguem as Ocorrências Operacionais e Análises de Causa Raiz referentes ao dia {data_matinal.strftime('%d/%m/%Y')}:\n\n"
+                    corpo_matinal += "==================================================\n"
+                    corpo_matinal += "📋 1. SUMÁRIO OPERACIONAL DOS TURNOS\n"
+                    corpo_matinal += "==================================================\n\n"
                     
-                    df_ac_sem = pd.read_sql_query(text("SELECT oque as \"Ação Programada\", quem as \"Responsável\", quando as \"Prazo\", status as \"Status\" FROM acoes_reportes WHERE reporte_id = :id"), engine, params={"id": int(r['id'])})
-                    if not df_ac_sem.empty:
-                        st.caption("📋 **Matriz de Planos Bloqueantes Alocados:**")
-                        st.dataframe(df_ac_sem, use_container_width=True)
-                    else:
-                        st.caption("ℹ️ Nenhum plano de ação cadastrado para este ofensor.")
+                    for _, r in df_reportes_dia.iterrows():
+                        texto_oc = r['ocorrencias'].strip() if r['ocorrencias'] and r['ocorrencias'].strip() else "Nenhuma grande intercorrência anotada no livro de turno."
+                        corpo_matinal += f"🔹 Turno {r['turno']} (Coordenador: {r['coordenador']}):\n{texto_oc}\n\n"
+                        
+                    corpo_matinal += "==================================================\n"
+                    corpo_matinal += "🛑 2. DIAGNÓSTICO 5 PORQUÊS E PLANOS DE AÇÃO\n"
+                    corpo_matinal += "==================================================\n\n"
+                    
+                    for _, r in df_reportes_dia.iterrows():
+                        corpo_matinal += f"⚙️ Turno {r['turno']} — Máquina: {r['maq_analisada']} | Ofensor: {r['problema']}\n"
+                        corpo_matinal += f"⏱️ DURAÇÃO DA PARADA: {r['duracao']}\n\n"
+                        corpo_matinal += f"   1º Por que? {r['pq1']}\n"
+                        corpo_matinal += f"   2º Por que? {r['pq2']}\n"
+                        corpo_matinal += f"   3º Por que? {r['pq3']}\n"
+                        corpo_matinal += f"   4º Por que? {r['pq4']}\n"
+                        corpo_matinal += f"   5º Por que? (Causa Raiz): {r['pq5']}\n\n"
+                        
+                        df_ac_email = pd.read_sql_query(text("SELECT oque, quem, quando, status FROM acoes_reportes WHERE reporte_id = :id"), engine, params={"id": int(r['id'])})
+                        if not df_ac_email.empty:
+                            corpo_matinal += "   📋 Planos de Ação Vinculados:\n"
+                            for _, ac in df_ac_email.iterrows():
+                                corpo_matinal += f"   • [Ação]: {ac['oque']} | [Resp]: {ac['quem']} | [Prazo]: {ac['quando']} | [Status]: {ac['status']}\n"
+                        else:
+                            corpo_matinal += "   ℹ️ Nenhum plano de ação cadastrado para este ofensor.\n"
+                            
+                        corpo_matinal += "--------------------------------------------------\n\n"
+                        
+                    corpo_matinal += f"Relatório gerado via Industrial Analytics Hub por: {st.session_state['usuario_logado'].upper()}"
+                    
+                    from urllib.parse import quote
+                    gmail_matinal_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={quote(lista_para_matinal)}&su={quote(assunto_matinal)}&body={quote(corpo_matinal)}"
+                    
+                    st.markdown(f"""
+                        <a href="{gmail_matinal_url}" target="_blank" style="text-decoration: none;">
+                            <div style="background-color: #d93025; color: white; text-align: center; padding: 12px 20px; font-weight: bold; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); cursor: pointer; font-size:0.9rem;">
+                                ✉️ COMPOR RELATÓRIO MATINAL NO GMAIL
+                            </div>
+                        </a>
+                    """, unsafe_allow_html=True)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
 
-        # =========================================================
-        # 📋 NIPPO COORDENADORES
-        # =========================================================
-        elif menu == "📋 NIPPO COORDENADORES":
-            st.markdown("## 📋 Nippo Coordenadores — Troca de Turno Operacional")
-            aba_lancar, aba_consultar = st.tabs(["📝 Lançar Fechamento", "🔍 Histórico / Gerenciamento"])
-            with aba_lancar:
-                versao_chave = st.session_state['contador_nippo']
-                st.subheader("Informações Gerais do Turno")
-                col_n1, col_n2 = st.columns(2)
-                with col_n1:
-                    data_nippo = st.date_input("Data do Nippo", date.today(), key=f"date_np_{versao_chave}")
-                    coordenador_nippo = st.text_input("Nome do Coordenador", placeholder="Ex: DANILO", key=f"coord_np_{versao_chave}").upper()
-                with col_n2:
-                    turno_nippo = st.selectbox("Selecione o Turno do Nippo", ["1º Turno", "2º Turno", "3º Turno"], index=2, key=f"turno_np_{versao_chave}")
-                    tecnico_nippo = st.text_input("Nome do Técnico Responsável", placeholder="Ex: KANIGIA", key=f"tec_np_{versao_chave}").upper()
+            # --- EXIBIÇÃO VISUAL ORIGINAL DA TELA ---
+            st.markdown("<div class='section-header'>📋 SUMÁRIO EXECUTIVO — PRINCIPAIS OCORRÊNCIAS DO DIA</div>", unsafe_allow_html=True)
+            for _, r in df_reportes_dia.iterrows():
+                st.markdown(f"🔹 **Turno {r['turno']}** (Coordenador: {r['coordenador']})")
+                st.info(r['ocorrencias'] if r['ocorrencias'].strip() else "Nenhuma grande intercorrência anotada no livro de turno.")
+            
+            st.markdown("<div class='section-header'>🛑 ANÁLISE DOS TOP OFENSORES E DIAGNÓSTICO 5 PORQUÊS</div>", unsafe_allow_html=True)
+            for _, r in df_reportes_dia.iterrows():
+                st.markdown(f"""
+                <div class="five-why-box">
+                    <h4 style="color:#059669; margin:0;">⚙️ Turno {r['turno']} — Máquina: {r['maq_analisada']} | Ofensor: {r['problema']}</h4>
+                    <h5 style="color:#e11d48; margin-top:5px; margin-bottom:15px;">⏱ DURAÇÃO DA PARADA: {r['duracao']}</h5>
+                    <div class="five-why-line"><b>1º Por que?</b> {r['pq1']}</div>
+                    <div class="five-why-line"><b>2º Por que?</b> {r['pq2']}</div>
+                    <div class="five-why-line"><b>3º Por que?</b> {r['pq3']}</div>
+                    <div class="five-why-line"><b>4º Por que?</b> {r['pq4']}</div>
+                    <div class="five-why-line"><b>5º Por que? (Causa Raiz)</b> <span style="color:#b91c1c; font-weight:600;">{r['pq5']}</span></div>
+                </div>
+                """, unsafe_allow_html=True)
                 
-                st.markdown("<div class='section-header'>Lançamento Individual por Máquina (M1 a M7)</div>", unsafe_allow_html=True)
-                maquinas_lista = [f"M{i}" for i in range(1, 8)]
-                mapa_inputs_maquinas = {}
-                for m_item in maquinas_lista:
-                    with st.expander(f"⚙️ Reporte de Campo — Máquina: {m_item}", expanded=True):
-                        col_b1, col_b2, col_b3 = st.columns([2, 1, 1])
-                        with col_b1: txt_compartilhar = st.text_area(f"Itens a compartilhar / Ocorrências ({m_item})", key=f"txt_nippo_{m_item}_{versao_chave}", height=90)
-                        with col_b2:
-                            sku_maq = st.text_input(f"SKU Atual ({m_item})", key=f"sku_nippo_{m_item}_{versao_chave}").upper()
-                            prod_maq = st.number_input(f"Produtividade % ({m_item})", min_value=0.0, max_value=100.0, step=0.1, key=f"prod_nippo_{m_item}_{versao_chave}")
-                            loss_maq = st.number_input(f"Loss % ({m_item})", min_value=0.0, max_value=100.0, step=0.1, key=f"loss_nippo_{m_item}_{versao_chave}")
-                        with col_b3:
-                            pal_ini_maq = st.text_input(f"Palete Inicial ({m_item})", key=f"pal_ini_nippo_{m_item}_{versao_chave}").upper()
-                            pal_fim_maq = st.text_input(f"Palete Final ({m_item})", key=f"pal_fim_nippo_{m_item}_{versao_chave}").upper()
-                            tot_ordem_maq = st.number_input(f"Total da Ordem ({m_item})", min_value=0, step=1, key=f"tot_nippo_{m_item}_{versao_chave}")
-                        mapa_inputs_maquinas[m_item] = {"itens": txt_compartilhar, "sku": sku_maq, "prod": prod_maq, "loss": loss_maq, "pal_ini": pal_ini_maq, "pal_fim": pal_fim_maq, "tot": tot_ordem_maq}
-                
-                if st.button("💾 GRAVAR REPORTE NIPPO NO BANCO", type="primary", use_container_width=True):
-                    if not coordenador_nippo or not tecnico_nippo: st.error("Os campos Coordenador e Técnico são obrigatórios.")
-                    else:
-                        engine = obter_engine()
-                        with engine.begin() as conn:
-                            for m_item, dados in mapa_inputs_maquinas.items():
-                                conn.execute(text("INSERT INTO nippo_coordenadores (data, turno, coordenador, tecnico, maquina, itens_compartilhar, produtividade, loss, sku, palete_inicial, palete_final, total_ordem) VALUES (:data, :turno, :coord, :tec, :maq, :itens, :prod, :loss, :sku, :p_ini, :p_fim, :tot)"), {"data": str(data_nippo), "turno": turno_nippo, "coord": coordenador_nippo, "tec": tecnico_nippo, "maq": m_item, "itens": dados["itens"], "prod": dados["prod"], "loss": dados["loss"], "sku": dados["sku"], "p_ini": dados["pal_ini"], "p_fim": dados["pal_fim"], "tot": int(dados["tot"])})
-                        st.session_state['contador_nippo'] += 1; st.success("🎉 O Nippo completo foi gravado!"); st.rerun()
-            with aba_consultar:
-                query_data = st.date_input("Filtrar Data", date.today(), key="q_data")
-                engine = obter_engine()
-                df_nippo_res = pd.read_sql_query(text("SELECT id, data, turno, coordenador, tecnico, maquina, itens_compartilhar, sku, produtividade, loss, palete_inicial, palete_final, total_ordem FROM nippo_coordenadores WHERE data = :data"), engine, params={"data": str(query_data)})
-                if df_nippo_res.empty: st.warning(f"Nenhum diário Nippo encontrado.")
-                else: st.dataframe(df_nippo_res, use_container_width=True)
+                df_ac_sem = pd.read_sql_query(text("SELECT oque as \"Ação Programada\", quem as \"Responsável\", quando as \"Prazo\", status as \"Status\" FROM acoes_reportes WHERE reporte_id = :id"), engine, params={"id": int(r['id'])})
+                if not df_ac_sem.empty:
+                    st.caption("📋 **Matriz de Planos Bloqueantes Alocados:**")
+                    st.dataframe(df_ac_sem, use_container_width=True)
+                else:
+                    st.caption("ℹ️ Nenhum plano de ação cadastrado para este ofensor.")
 
-    else:
-        st.info("💡 Por favor, carregue os arquivos Excel para iniciar o Analytics Hub.")
+    # =========================================================
+    # 📋 NIPPO COORDENADORES (ABA LIVRE)
+    # =========================================================
+    elif menu == "📋 NIPPO COORDENADORES":
+        st.markdown("## 📋 Nippo Coordenadores — Troca de Turno Operacional")
+        aba_lancar, aba_consultar = st.tabs(["📝 Lançar Fechamento", "🔍 Histórico / Gerenciamento"])
+        with aba_lancar:
+            versao_chave = st.session_state['contador_nippo']
+            st.subheader("Informações Gerais do Turno")
+            col_n1, col_n2 = st.columns(2)
+            with col_n1:
+                data_nippo = st.date_input("Data do Nippo", date.today(), key=f"date_np_{versao_chave}")
+                coordenador_nippo = st.text_input("Nome do Coordenador", placeholder="Ex: DANILO", key=f"coord_np_{versao_chave}").upper()
+            with col_n2:
+                turno_nippo = st.selectbox("Selecione o Turno do Nippo", ["1º Turno", "2º Turno", "3º Turno"], index=2, key=f"turno_np_{versao_chave}")
+                tecnico_nippo = st.text_input("Nome do Técnico Responsável", placeholder="Ex: KANIGIA", key=f"tec_np_{versao_chave}").upper()
+            
+            st.markdown("<div class='section-header'>Lançamento Individual por Máquina (M1 a M7)</div>", unsafe_allow_html=True)
+            maquinas_lista = [f"M{i}" for i in range(1, 8)]
+            mapa_inputs_maquinas = {}
+            for m_item in maquinas_lista:
+                with st.expander(f"⚙️ Reporte de Campo — Máquina: {m_item}", expanded=True):
+                    col_b1, col_b2, col_b3 = st.columns([2, 1, 1])
+                    with col_b1: txt_compartilhar = st.text_area(f"Itens a compartilhar / Ocorrências ({m_item})", key=f"txt_nippo_{m_item}_{versao_chave}", height=90)
+                    with col_b2:
+                        sku_maq = st.text_input(f"SKU Atual ({m_item})", key=f"sku_nippo_{m_item}_{versao_chave}").upper()
+                        prod_maq = st.number_input(f"Produtividade % ({m_item})", min_value=0.0, max_value=100.0, step=0.1, key=f"prod_nippo_{m_item}_{versao_chave}")
+                        loss_maq = st.number_input(f"Loss % ({m_item})", min_value=0.0, max_value=100.0, step=0.1, key=f"loss_nippo_{m_item}_{versao_chave}")
+                    with col_b3:
+                        pal_ini_maq = st.text_input(f"Palete Inicial ({m_item})", key=f"pal_ini_nippo_{m_item}_{versao_chave}").upper()
+                        pal_fim_maq = st.text_input(f"Palete Final ({m_item})", key=f"pal_fim_nippo_{m_item}_{versao_chave}").upper()
+                        tot_ordem_maq = st.number_input(f"Total da Ordem ({m_item})", min_value=0, step=1, key=f"tot_nippo_{m_item}_{versao_chave}")
+                    mapa_inputs_maquinas[m_item] = {"itens": txt_compartilhar, "sku": sku_maq, "prod": prod_maq, "loss": loss_maq, "pal_ini": pal_ini_maq, "pal_fim": pal_fim_maq, "tot": tot_ordem_maq}
+            
+            if st.button("💾 GRAVAR REPORTE NIPPO NO BANCO", type="primary", use_container_width=True):
+                if not coordenador_nippo or not tecnico_nippo: st.error("Os campos Coordenador e Técnico são obrigatórios.")
+                else:
+                    engine = obter_engine()
+                    with engine.begin() as conn:
+                        for m_item, dados in mapa_inputs_maquinas.items():
+                            conn.execute(text("INSERT INTO nippo_coordenadores (data, turno, coordenador, tecnico, maquina, itens_compartilhar, produtividade, loss, sku, palete_inicial, palete_final, total_ordem) VALUES (:data, :turno, :coord, :tec, :maq, :itens, :prod, :loss, :sku, :p_ini, :p_fim, :tot)"), {"data": str(data_nippo), "turno": turno_nippo, "coord": coordenador_nippo, "tec": tecnico_nippo, "maq": m_item, "itens": dados["itens"], "prod": dados["prod"], "loss": dados["loss"], "sku": dados["sku"], "p_ini": dados["pal_ini"], "p_fim": dados["pal_fim"], "tot": int(dados["tot"])})
+                    st.session_state['contador_nippo'] += 1; st.success("🎉 O Nippo completo foi gravado!"); st.rerun()
+        with aba_consultar:
+            query_data = st.date_input("Filtrar Data", date.today(), key="q_data")
+            engine = obter_engine()
+            df_nippo_res = pd.read_sql_query(text("SELECT id, data, turno, coordenador, tecnico, maquina, itens_compartilhar, sku, produtividade, loss, palete_inicial, palete_final, total_ordem FROM nippo_coordenadores WHERE data = :data"), engine, params={"data": str(query_data)})
+            if df_nippo_res.empty: st.warning(f"Nenhum diário Nippo encontrado.")
+            else: st.dataframe(df_nippo_res, use_container_width=True)
