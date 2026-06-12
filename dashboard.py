@@ -272,7 +272,7 @@ if not st.session_state['autenticado']:
             cad_user = st.text_input("Defina seu Login", key=f"cad_u_{v_cad}").strip().lower()
             cad_senha = st.text_input("Defina sua Senha (Mínimo 8 caracteres)", type="password", key=f"cad_s_{v_cad}")
             cad_conf_senha = st.text_input("Confirme sua Senha", type="password", key=f"cad_cs_{v_cad}")
-            cad_cargo = st.selectbox("Selecione seu Cargo", ["Gerente", "Coordenador", "Analista", "Técnico de Produção", "Operador", "Menor Aprendiz", "Assistente"], key=f"cad_c_{v_cad}")
+            cad_cargo = st.selectbox("Selecione seu Cargo", ["Gerente", "Coordenador", "Analista", "Técnico de Processos", "Operador", "Menor Aprendiz", "Assistente"], key=f"cad_c_{v_cad}")
             lista_erros_senha = validar_forca_senha(cad_senha) if cad_senha else []
             if cad_senha:
                 if len(lista_erros_senha) > 0:
@@ -298,11 +298,11 @@ else:
     cargo = st.session_state['cargo_logado']
     todas_abas = [
         "📋 REPORTE DIÁRIO", "📈 PERFORMANCE", "🛑 TOP 10 PARADAS", "📅 CALENDÁRIO", 
-        "📋 ANÁLISE SEMANAL", "📝 LANÇAR REPORTE", "📊 ACOMPANHAMENTO", 
+        "📋 ANÁLISE SEMANAL", "📊 APRESENTAÇÃO SEMANAL", "📝 LANÇAR REPORTE", "📊 ACOMPANHAMENTO", 
         "📝 LANÇAR ANÁLISE SEMANAL", "📋 ACOMP. ANÁLISES SEMANAIS", "📋 PAINEL UNIFICADO DE AÇÕES", 
         "📋 RELATÓRIO CONSOLIDADO", "📋 NIPPO COORDENADORES"
     ]
-    if cargo == "Operador": abas_permitidas = ["📝 LANÇAR ANÁLISE SEMANAL", "📋 PAINEL UNIFICADO DE AÇÕES"]
+    if cargo == "Operador": abas_permitidas = ["📊 APRESENTAÇÃO SEMANAL", "📝 LANÇAR ANÁLISE SEMANAL", "📋 PAINEL UNIFICADO DE AÇÕES"]
     elif cargo in ["Menor Aprendiz", "Assistente"]: abas_permitidas = [a for a in todas_abas if a not in ["📊 ACOMPANHAMENTO", "📋 ACOMP. ANÁLISES SEMANAIS", "📋 NIPPO COORDENADORES", "📋 RELATÓRIO CONSOLIDADO"]]
     else: abas_permitidas = todas_abas
 
@@ -505,6 +505,131 @@ else:
                 1. Por que? <div class="five-why-line"></div> 2. Por que? <div class="five-why-line"></div> 3. Por que? <div class="five-why-line"></div> 
                 4. Por que? <div class="five-why-line"></div> 5. Por que? <div class="five-why-line"></div>
                 <b>CAUSA RAIZ / PLANO DE AÇÃO:</b> <div class="five-why-line"></div><div class="five-why-line"></div></div>""", unsafe_allow_html=True)
+
+        # =========================================================
+        # 📊 ABA: APRESENTAÇÃO SEMANAL (NOVA ABA OPERACIONAL)
+        # =========================================================
+        elif menu == "📊 APRESENTAÇÃO SEMANAL":
+            st.markdown("## 📊 Apresentação Semanal para Operadores (Troca de Turno)")
+            st.caption("Esta tela consolida os dados de performance do turno e busca de forma automatizada os 5 Porquês já cadastrados para a pior máquina da semana.")
+            
+            # Filtros estruturados para o alinhamento matinal/semanal
+            st.subheader("⚙️ Filtros da Reunião Semanal")
+            ap_c1, ap_c2, ap_c3 = st.columns(3)
+            with ap_c1:
+                periodo_ap = st.date_input("Período da Semana Analisada", [df_order['Data'].max() - timedelta(days=7), df_order['Data'].max()], key='p_apres')
+            with ap_c2:
+                turno_ap = st.selectbox("Selecione o Turno", sorted(df_order['Turno'].unique(), reverse=False), key='t_apres')
+            with ap_c3:
+                coord_ap = st.text_input("Coordenador da Reunião", value=st.session_state['usuario_logado'].upper() if st.session_state['usuario_logado'] else "").upper()
+            
+            # Garante que o intervalo de datas foi completamente inserido antes de rodar os calculos
+            if len(periodo_ap) == 2:
+                # Filtrando os dados brutos da produção para o período e turno escolhido
+                df_ap_all = df_order[(df_order['Data'].dt.date >= periodo_ap[0]) & (df_order['Data'].dt.date <= periodo_ap[1]) & (df_order['Turno'] == turno_ap)]
+                df_ap_stops_all = df_stops[(df_stops['Data'].dt.date >= periodo_ap[0]) & (df_stops['Data'].dt.date <= periodo_ap[1]) & (df_stops['Turno'] == turno_ap)]
+                
+                if df_ap_all.empty:
+                    st.warning(f"⚠️ Não foram encontrados registros de produção para o {turno_ap}º Turno no período selecionado.")
+                else:
+                    st.markdown(f"""<div style="text-align:center; border-bottom:3px solid #10b981; padding-bottom:10px; margin-bottom:20px; margin-top:15px;">
+                        <h2 style="color:#0f172a; margin:0;">📈 ALINHAMENTO SEMANAL — {turno_ap}º TURNO</h2>
+                        <h4 style="color:#64748b; margin:5px 0 0 0;">COORDENADOR RESPONSÁVEL: {coord_ap if coord_ap else "NÃO INFORMADO"}</h4>
+                        <p style="color:#10b981; font-size:0.95rem; font-weight:600; margin:5px 0 0 0;">Resultados de {periodo_ap[0].strftime('%d/%m/%Y')} até {periodo_ap[1].strftime('%d/%m/%Y')}</p></div>""", unsafe_allow_html=True)
+                    
+                    # 1. Montagem do Ranking Semanal de Movimentação do Turno
+                    rank_ap = df_ap_all.groupby('Máquina').agg({'Run Time':'sum', 'Horário Padrão':'sum'}).reset_index()
+                    rank_ap['Mov %'] = (rank_ap['Run Time'] / rank_ap['Horário Padrão'].replace(0,1) * 100).round(1)
+                    rank_ap = rank_ap.sort_values('Mov %', ascending=False).reset_index(drop=True)
+                    rank_ap.index += 1
+                    
+                    st.markdown("<div class='section-header'>🏆 RANKING SEMANAL DE MOVIMENTAÇÃO DO TURNO</div>", unsafe_allow_html=True)
+                    cols_rank = st.columns(len(rank_ap) if len(rank_ap) > 0 else 1)
+                    for idx, r in rank_ap.iterrows():
+                        medalha = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else "⚙️"
+                        cor_borda = "#10b981" if idx <= 2 else "#ef4444" if idx == len(rank_ap) else "#cbd5e1"
+                        cols_rank[idx-1].markdown(f"""
+                            <div style="background-color:#f8fafc; border:1px solid #e2e8f0; border-left:5px solid {cor_borda}; border-radius:8px; padding:10px; text-align:center;">
+                                <div style="font-size:1.1rem;">{medalha} <b>{idx}º</b></div>
+                                <div style="font-size:0.75rem; font-weight:700; color:#64748b; text-transform:uppercase;">MÁQ {r['Máquina']}</div>
+                                <div style="font-size:1.2rem; font-weight:900; color:#0f172a;">{r['Mov %']}%</div>
+                            </div>
+                        """, unsafe_allow_html=True)
+                    
+                    # 2. Identificação automática da Pior Máquina (Última do ranking)
+                    pior_maquina_turno = str(rank_ap.iloc[-1]['Máquina'])
+                    pior_mov_turno = rank_ap.iloc[-1]['Mov %']
+                    
+                    st.markdown(f"<div class='section-header'>🛑 ANÁLISE DO MAIOR OFENSOR DA SEMANA: MÁQUINA {pior_maquina_turno} (MOV: {pior_mov_turno}%)</div>", unsafe_allow_html=True)
+                    
+                    # Filtrando paradas exclusivas da pior máquina mapeada
+                    df_pior_maq_stops = df_ap_stops_all[df_ap_stops_all['Máquina'] == pior_maquina_turno]
+                    stop_ap_data = df_pior_maq_stops.groupby('Problema')['Minutos'].sum().sort_values(ascending=True).tail(5)
+                    
+                    col_p1, col_p2 = st.columns([3, 2])
+                    with col_p1:
+                        if not stop_ap_data.empty:
+                            st.plotly_chart(px.bar(stop_ap_data, orientation='h', text_auto=True, title=f"Top 5 Ofensores em Minutos - Máquina {pior_maquina_turno}", color_discrete_sequence=['#ef4444']).update_layout(height=280, paper_bgcolor='white', plot_bgcolor='white', font={'color':'black'}), use_container_width=True)
+                            pior_parada_detectada = stop_ap_data.index[-1]
+                        else:
+                            st.info(f"ℹ️ Nenhuma parada registrada no Excel para a Máquina {pior_maquina_turno} neste período.")
+                            pior_parada_detectada = None
+                    with col_p2:
+                        st.markdown("**Desempenho Geral do Turno:**")
+                        tot_mc_ap = df_ap_all['Machine Counter'].sum()
+                        tot_est_ap = df_ap_all['Peças Estoque - Ajuste'].sum()
+                        tot_loss_ap = ((tot_mc_ap - tot_est_ap) / tot_mc_ap * 100) if tot_mc_ap > 0 else 0
+                        
+                        st.markdown(f"""
+                            <div style="background-color:#fffdfa; border:1px solid #fef3c7; border-radius:8px; padding:15px; min-height:210px;">
+                                <p style="margin:0 0 5px 0; font-size:0.8rem; font-weight:700; color:#b45309; text-transform:uppercase;">📝 CONSOLIDADO OPERACIONAL</p>
+                                <div style="font-size:13px; line-height:2; color:#475569;">
+                                    • Total Machine Counter Semanal: <b>{fmt(tot_mc_ap)} peças</b><br>
+                                    • Total Peças Enviadas para Estoque: <b>{fmt(tot_est_ap)} peças</b><br>
+                                    • Índice de Loss do Turno: <span style="color:{'#10b981' if tot_loss_ap <= 2.5 else '#ef4444'}; font-weight:bold;">{tot_loss_ap:.2f}%</span> (Meta: 2.5%)<br>
+                                    • Máquina com Maior Gargalo: <span style="color:#ef4444; font-weight:bold;">MÁQUINA {pior_maquina_turno}</span>
+                                </div>
+                            </div>
+                        """, unsafe_allow_html=True)
+
+                    # 3. Busca no Banco Remoto dos 5 Porquês Já Cadastrados
+                    st.markdown("<div class='section-header'>🧠 LEITURA COMPARTILHADA DOS 5 PORQUÊS (MÉTODO DA CAUSA RAIZ)</div>", unsafe_allow_html=True)
+                    
+                    engine = obter_engine()
+                    # Query cirúrgica que localiza a análise semanal vinculada àquela pior máquina e turno
+                    query_busca_5pq = text("""
+                        SELECT id, pior_parada, duracao, pq1, pq2, pq3, pq4, pq5 
+                        FROM analises_semanais 
+                        WHERE maquina = :maq AND turno = :turno ORDER BY id DESC LIMIT 1
+                    """)
+                    
+                    df_busca_db = pd.read_sql_query(query_busca_5pq, engine, params={"maq": pior_maquina_turno, "turno": f"T{turno_ap}"})
+                    
+                    if df_busca_db.empty:
+                        st.warning(f"⚠️ A análise estruturada da Máquina {pior_maquina_turno} (Turno T{turno_ap}) ainda não foi cadastrada pelos analistas ou líderes na aba 'Lançar Análise Semanal' para este ciclo.")
+                    else:
+                        reg_5pq = df_busca_db.iloc[0]
+                        st.markdown(f"""
+                        <div class="five-why-box" style="border-left: 6px solid #ef4444; background-color:#fafafa;">
+                            <h3 style="color:#b91c1c; margin:0;">🎯 Ofensor Analisado: {reg_5pq['pior_parada']}</h3>
+                            <h5 style="color:#475569; margin-top:5px; margin-bottom:15px;">⏱️ TEMPO ACUMULADO DE INDISPONIBILIDADE: {reg_5pq['duracao']}</h5>
+                            <div class="five-why-line"><b>1º Por que?</b> {reg_5pq['pq1']}</div>
+                            <div class="five-why-line"><b>2º Por que?</b> {reg_5pq['pq2']}</div>
+                            <div class="five-why-line"><b>3º Por que?</b> {reg_5pq['pq3']}</div>
+                            <div class="five-why-line"><b>4º Por que?</b> {reg_5pq['pq4']}</div>
+                            <div class="five-why-line"><b>5º Por que? (Causa Raiz Mapeada)</b> <span style="color:#b91c1c; font-weight:bold;">{reg_5pq['pq5']}</span></div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # Buscando o plano de ações corretivas atreladas a esse diagnóstico
+                        df_acoes_reuniao = pd.read_sql_query(text("SELECT oque as \"Plano de Ação Corretiva\", quem as \"Responsável\", quando as \"Prazo\", status as \"Status\" FROM acoes_semanais WHERE analise_id = :id"), engine, params={"id": int(reg_5pq['id'])})
+                        if not df_acoes_reuniao.empty:
+                            st.markdown("##### 📋 Contra-medidas e Planos Bloqueantes Alocados:")
+                            st.dataframe(df_acoes_reuniao, use_container_width=True)
+                        else:
+                            st.caption("ℹ️ Nenhum plano de contra-medida pendente cadastrado para este ofensor.")
+            else:
+                st.info("💡 Por favor, selecione a data inicial e final do período no filtro acima para gerar os indicadores.")
 
         # =========================================================
         # 📝 LANÇAR REPORTE (SENHA E BLOQUEIO DE ENTER ACIDENTAL ATIVADOS)
@@ -735,7 +860,7 @@ else:
                                 with engine.begin() as conn: conn.execute(text("DELETE FROM analises_semanais WHERE id = :id"), {"id": int(id_sel_sem)})
                                 st.session_state['mostrar_edicao_semanal'] = False; st.rerun()
 
-# =========================================================
+        # =========================================================
         # 📋 ABA: CENTRAL E PAINEL UNIFICADO DE AÇÕES (INTEGRAÇÃO GMAIL COMPATÍVEL UNICHARM)
         # =========================================================
         elif menu == "📋 PAINEL UNIFICADO DE AÇÕES":
@@ -772,7 +897,7 @@ else:
                 
                 st.markdown("<br>", unsafe_allow_html=True)
 
-                # --- BLOCO: CENTRAL TRANSMISSORA GMAIL PADRONIZADA (NÃO AUTOMÁTICO - SEGURO) ---
+                # --- BLOCO: CENTRAL TRANSMISSORA GMAIL PADRONIZADA ---
                 st.markdown("<div class='section-header'>📧 NOTIFICAR COBRANÇA COLETIVA (GMAIL CORPORATIVO)</div>", unsafe_allow_html=True)
                 
                 df_nao_resolvidas = df_unificado[df_unificado['status'].isin(["Pendente", "Em Andamento"])].copy()
@@ -793,7 +918,6 @@ else:
                         
                         col_mail1, col_mail2 = st.columns(2)
                         with col_mail1:
-                            # Lista padrão Unicharm injetada de forma estática
                             lista_emails_padrao = "pedro-santos@unicharm.com,andre-oliveira@unicharm.com,maria-sousa@unicharm.com,danilo-santos@unicharm.com,mauricio-oliveira@unicharm.com,denis-pompollino@unicharm.com,larissa-fernanda@unicharm.com,douglas-kurosaki@unicharm.com,rogerio-simoes@unicharm.com,kanigia-silva@unicharm.com,wellington-rui@unicharm.com,miltom-oikava@unicharm.com,quenia-martins@unicharm.com"
                             lista_para = st.text_area("Enviar Para (Lista Unicharm Padronizada)", value=lista_emails_padrao, height=70)
                         with col_mail2:
@@ -850,8 +974,8 @@ else:
                     df_ok = df_unificado[df_unificado['status'] == "Resolvido"]
                     if df_ok.empty: st.warning("Ainda não temos ações concluídas gravadas na nuvem.")
                     else: st.dataframe(df_ok[colunas_exibicao], use_container_width=True)
-        
-# =========================================================
+
+        # =========================================================
         # 📋 ABA: RELATÓRIO CONSOLIDADO DE OCORRÊNCIAS OPERACIONAIS (COM ENVIO GMAIL)
         # =========================================================
         elif menu == "📋 RELATÓRIO CONSOLIDADO":
@@ -873,7 +997,6 @@ else:
                     
                     col_mat1, col_mat2 = st.columns(2)
                     with col_mat1:
-                        # Mesma lista padrão injetada na caixa de texto do consolidado
                         lista_emails_padrao = "pedro-santos@unicharm.com,andre-oliveira@unicharm.com,maria-sousa@unicharm.com,danilo-santos@unicharm.com,mauricio-oliveira@unicharm.com,denis-pompollino@unicharm.com,larissa-fernanda@unicharm.com,douglas-kurosaki@unicharm.com,rogerio-simoes@unicharm.com,kanigia-silva@unicharm.com,wellington-rui@unicharm.com,miltom-oikava@unicharm.com,quenia-martins@unicharm.com"
                         lista_para_matinal = st.text_area("Enviar Para (Lista Unicharm Padronizada)", value=lista_emails_padrao, height=70, key="para_matinal")
                     with col_mat2:
@@ -953,7 +1076,8 @@ else:
                         st.dataframe(df_ac_sem, use_container_width=True)
                     else:
                         st.caption("ℹ️ Nenhum plano de ação cadastrado para este ofensor.")
-                        
+
+        # =========================================================
         # 📋 NIPPO COORDENADORES
         # =========================================================
         elif menu == "📋 NIPPO COORDENADORES":
