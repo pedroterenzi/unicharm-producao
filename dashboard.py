@@ -551,7 +551,7 @@ else:
                         <p style="color:#10b981; font-size:0.95rem; font-weight:600; margin:5px 0 0 0;">Resultados de {periodo_ap[0].strftime('%d/%m/%Y')} até {periodo_ap[1].strftime('%d/%m/%Y')}</p></div>""", unsafe_allow_html=True)
                     
                     rank_ap = df_ap_all.groupby('Máquina').agg({'Run Time':'sum', 'Horário Padrão':'sum'}).reset_index()
-                    rank_ap['Mov %'] = (rank_ap['Run Time'] / rank_ap['Horário Padrão'].replace(0,1) * 100).round(1)
+                    rank_ap['Mov %'] = (rank_ap['Run Time'] / rank_ap['Horãrio Padrão'].replace(0,1) * 100).round(1)
                     rank_ap = rank_ap.sort_values('Mov %', ascending=False).reset_index(drop=True)
                     rank_ap.index += 1
                     
@@ -637,7 +637,7 @@ else:
                 st.info("💡 Por favor, selecione a data inicial e final do período no filtro acima para gerar os indicadores.")
 
     # =========================================================
-    # 📝 LANÇAR REPORTE (ABA LIVRE - BANCO DE DADOS DIRETO)
+    # 📝 LANÇAR REPORTE
     # =========================================================
     elif menu == "📝 LANÇAR REPORTE":
         v_rep = st.session_state['chave_form_reporte']
@@ -699,7 +699,7 @@ else:
                     st.success(f"🎉 Registro ID #{reporte_id} salvo com sucesso!"); st.rerun()
 
     # =========================================================
-    # 📊 ABA: ACOMPANHAMENTO (ABA LIVRE)
+    # 📊 ABA: ACOMPANHAMENTO
     # =========================================================
     elif menu == "📊 ACOMPANHAMENTO":
         st.markdown("## 📊 Mesa de Edição — Reportes Diários")
@@ -759,13 +759,12 @@ else:
                             st.session_state['mostrar_edicao'] = False; st.rerun()
 
     # =========================================================
-    # 📝 LANÇAR ANÁLISE SEMANAL (ABA LIVRE)
+    # 📝 LANÇAR ANÁLISE SEMANAL
     # =========================================================
     elif menu == "📝 LANÇAR ANÁLISE SEMANAL":
         v_sem = st.session_state['chave_form_semanal']
         st.markdown("## 📝 Formulário de Lançamento — Análise Semanal")
         
-        # Como o selectbox de máquinas precisa de uma lista, fornecemos uma padrão caso o Excel não tenha sido aberto
         lista_maquinas_padrao = sorted(df_order['Máquina'].unique()) if df_order is not None else [str(i) for i in range(1, 8)]
         
         with st.form("form_analise_semanal", clear_on_submit=False):
@@ -815,7 +814,7 @@ else:
                     st.success(f"🎉 Análise Semanal ID #{analise_id} gravada!"); st.rerun()
 
     # =========================================================
-    # 📋 ACOMP. ANÁLISES SEMANAIS (ABA LIVRE)
+    # 📋 ACOMP. ANÁLISES SEMANAIS
     # =========================================================
     elif menu == "📋 ACOMP. ANÁLISES SEMANAIS":
         st.markdown("## 📋 Mesa de Edição — Análises Semanais")
@@ -870,7 +869,7 @@ else:
                             st.session_state['mostrar_edicao_semanal'] = False; st.rerun()
 
     # =========================================================
-    # 📋 PAINEL UNIFICADO DE AÇÕES (GMAIL DISPONÍVEL IMEDIATAMENTE)
+    # 📋 PAINEL UNIFICADO DE AÇÕES
     # =========================================================
     elif menu == "📋 PAINEL UNIFICADO DE AÇÕES":
         st.markdown("## 📋 Painel Unificado de Ações Industriais (Central de Cobrança)")
@@ -985,7 +984,7 @@ else:
                 else: st.dataframe(df_ok[colunas_exibicao], use_container_width=True)
 
     # =========================================================
-    # 📋 RELATÓRIO CONSOLIDADO (ABA LIVRE)
+    # 📋 RELATÓRIO CONSOLIDADO
     # =========================================================
     elif menu == "📋 RELATÓRIO CONSOLIDADO":
         st.markdown("## 📋 Relatório Consolidado de Ocorrências Operacionais (Sumário Matinal)")
@@ -1087,7 +1086,7 @@ else:
                     st.caption("ℹ️ Nenhum plano de ação cadastrado para este ofensor.")
 
     # =========================================================
-    # 📋 NIPPO COORDENADORES (ABA LIVRE)
+    # 📋 NIPPO COORDENADORES (COM SISTEMA COMPLETO DE EDIÇÃO E EXCLUSÃO)
     # =========================================================
     elif menu == "📋 NIPPO COORDENADORES":
         st.markdown("## 📋 Nippo Coordenadores — Troca de Turno Operacional")
@@ -1128,9 +1127,68 @@ else:
                         for m_item, dados in mapa_inputs_maquinas.items():
                             conn.execute(text("INSERT INTO nippo_coordenadores (data, turno, coordenador, tecnico, maquina, itens_compartilhar, produtividade, loss, sku, palete_inicial, palete_final, total_ordem) VALUES (:data, :turno, :coord, :tec, :maq, :itens, :prod, :loss, :sku, :p_ini, :p_fim, :tot)"), {"data": str(data_nippo), "turno": turno_nippo, "coord": coordenador_nippo, "tec": tecnico_nippo, "maq": m_item, "itens": dados["itens"], "prod": dados["prod"], "loss": dados["loss"], "sku": dados["sku"], "p_ini": dados["pal_ini"], "p_fim": dados["pal_fim"], "tot": int(dados["tot"])})
                     st.session_state['contador_nippo'] += 1; st.success("🎉 O Nippo completo foi gravado!"); st.rerun()
+        
         with aba_consultar:
             query_data = st.date_input("Filtrar Data", date.today(), key="q_data")
             engine = obter_engine()
-            df_nippo_res = pd.read_sql_query(text("SELECT id, data, turno, coordenador, tecnico, maquina, itens_compartilhar, sku, produtividade, loss, palete_inicial, palete_final, total_ordem FROM nippo_coordenadores WHERE data = :data"), engine, params={"data": str(query_data)})
-            if df_nippo_res.empty: st.warning(f"Nenhum diário Nippo encontrado.")
-            else: st.dataframe(df_nippo_res, use_container_width=True)
+            
+            # Puxa os dados brutos da nuvem
+            df_nippo_res = pd.read_sql_query(text("""
+                SELECT id, data as "Data", turno as "Turno", coordenador as "Coordenador", tecnico as "Técnico", 
+                       maquina as "Máquina", itens_compartilhar as "Ocorrências", sku as "SKU", 
+                       produtividade as "Produtividade %", loss as "Loss %", palete_inicial as "Palete Inicial", 
+                       palete_final as "Palete Final", total_ordem as "Total Ordem" 
+                FROM nippo_coordenadores WHERE data = :data ORDER BY id ASC
+            """), engine, params={"data": str(query_data)})
+            
+            if df_nippo_res.empty: 
+                st.warning(f"Nenhum diário Nippo encontrado para a data {query_data.strftime('%d/%m/%Y')}.")
+            else:
+                st.markdown("<div class='section-header'>🔍 MESA DE EDIÇÃO EM TEMPO REAL — DIÁRIO NIPPO</div>", unsafe_allow_html=True)
+                st.caption("Dica: Altere os valores diretamente nas células da tabela abaixo e depois clique no botão salvar.")
+                
+                # Transforma o DataFrame em uma planilha editável na tela
+                tabela_editavel_nippo = st.data_editor(
+                    df_nippo_res,
+                    disabled=["id", "Data", "Turno", "Máquina"], # Bloqueia chaves que não devem mudar
+                    use_container_width=True,
+                    key=f"editor_nippo_remoto_{query_data}"
+                )
+                
+                # Estrutura de botões de controle de salvamento e exclusão
+                btn_np1, btn_np2 = st.columns([2, 1])
+                
+                with btn_np1:
+                    if st.button("💾 SALVAR ALTERAÇÕES DO NIPPO", use_container_width=True):
+                        with engine.begin() as conn:
+                            for _, linha in tabela_editavel_nippo.iterrows():
+                                conn.execute(text("""
+                                    UPDATE nippo_coordenadores 
+                                    SET coordenador = :coord, tecnico = :tec, itens_compartilhar = :itens, 
+                                        sku = :sku, produtividade = :prod, loss = :loss, 
+                                        palete_inicial = :p_ini, palete_final = :p_fim, total_ordem = :tot 
+                                    WHERE id = :id
+                                """), {
+                                    "coord": str(linha["Coordenador"]).upper(),
+                                    "tec": str(linha["Técnico"]).upper(),
+                                    "itens": linha["Ocorrências"],
+                                    "sku": str(linha["SKU"]).upper(),
+                                    "prod": float(linha["Produtividade %"]),
+                                    "loss": float(linha["Loss %"]),
+                                    "p_ini": str(linha["Palete Inicial"]).upper(),
+                                    "p_fim": str(linha["Palete Final"]).upper(),
+                                    "tot": int(linha["Total Ordem"]),
+                                    "id": int(linha["id"])
+                                })
+                        st.success("🎉 Alterações do Nippo sincronizadas na nuvem com sucesso!"); st.rerun()
+                
+                with btn_np2:
+                    # Campo e botão para exclusão de linhas com erro crônico
+                    id_deletar_nippo = st.number_input("ID para Deletar Definitivamente:", min_value=1, step=1, key="id_del_np")
+                    if st.button("❌ EXCLUIR REGISTRO DO BANCO", type="primary", use_container_width=True):
+                        if id_deletar_nippo in df_nippo_res["id"].values:
+                            with engine.begin() as conn:
+                                conn.execute(text("DELETE FROM nippo_coordenadores WHERE id = :id"), {"id": int(id_deletar_nippo)})
+                            st.success(f"💥 Registro ID #{id_deletar_nippo} removido do banco remoto!"); st.rerun()
+                        else:
+                            st.error("⚠️ ID digitado não pertence à tabela exibida.")
