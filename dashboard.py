@@ -735,12 +735,12 @@ else:
                                 with engine.begin() as conn: conn.execute(text("DELETE FROM analises_semanais WHERE id = :id"), {"id": int(id_sel_sem)})
                                 st.session_state['mostrar_edicao_semanal'] = False; st.rerun()
 
-   # =========================================================
-        # 📋 ABA: CENTRAL E PAINEL UNIFICADO DE AÇÕES (COM DISPARO DE COBRANÇA)
+# =========================================================
+        # 📋 ABA: CENTRAL E PAINEL UNIFICADO DE AÇÕES (VIA MAILTO SEGURO)
         # =========================================================
         elif menu == "📋 PAINEL UNIFICADO DE AÇÕES":
             st.markdown("## 📋 Painel Unificado de Ações Industriais (Central de Cobrança)")
-            st.caption("Esta tela compila em tempo real todas as ações (Reportes Diários + Análises Semanais) e permite cobrar a equipe por e-mail sobre pendências atrasadas.")
+            st.caption("Esta tela compila em tempo real todas as ações e permite gerar cobranças integradas ao Outlook corporativo de forma segura.")
             
             engine = obter_engine()
             df_ac_rep = pd.read_sql_query("""
@@ -772,152 +772,85 @@ else:
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                # --- SISTEMA DINÂMICO DE NOTIFICAÇÃO E COBRANÇA POR E-MAIL ---
-                st.markdown("<div class='section-header'>📧 CENTRAL TRANSMISSORA - COBRANÇA COLETIVA DE ATRASOS</div>", unsafe_allow_html=True)
+                # --- SISTEMA SEGURO DE COBRANÇA CORPORATIVA ---
+                st.markdown("<div class='section-header'>📧 CENTRAL TRANSMISSORA - COBRANÇA DE ATRASOS (COMPATÍVEL UNICHARM)</div>", unsafe_allow_html=True)
                 
-                # Tentativa de mapear e filtrar prazos vencidos de forma inteligente
-                # Nota: Como o campo 'Prazo' no seu banco é TEXT, faremos um filtro baseado nas ações não resolvidas
                 df_nao_resolvidas = df_unificado[df_unificado['status'].isin(["Pendente", "Em Andamento"])].copy()
                 
                 if df_nao_resolvidas.empty:
                     st.success("✨ Excelente! Não existem ações pendentes ou em andamento para cobrar.")
                 else:
-                    with st.expander("📢 DISPARAR E-MAIL DE ALERTA PARA A EQUIPE", expanded=False):
+                    with st.expander("📢 PREPARAR COBRANÇA COLETIVA PARA A EQUIPE", expanded=True):
                         st.markdown("""
                             <p style='font-size:0.85rem; color:#64748b;'>
-                            Selecione abaixo as ações que estão com o <b>prazo estourado</b>. O sistema gerará um e-mail formal 
-                            em formato HTML contendo a tabela detalhada e enviará para toda a lista de contatos informada.
+                            Selecione na tabela abaixo as ações que estão com o prazo estourado. O sistema gerará a estrutura 
+                            e abrirá seu <b>Outlook corporativo</b> de forma segura para o envio final, sem pedir senhas.
                             </p>
                         """, unsafe_allow_html=True)
                         
-                        # Dataframe com checkbox para o analista selecionar manualmente quais estão de fato atrasadas
+                        # Tabela para seleção manual
                         df_nao_resolvidas['Cobrar?'] = False
                         df_selecao = st.data_editor(
                             df_nao_resolvidas[['Cobrar?', 'Origem', 'Máquina', 'Problema / Ofensor', 'O que Fazer', 'Responsável', 'Prazo', 'status']],
                             disabled=['Origem', 'Máquina', 'Problema / Ofensor', 'O que Fazer', 'Responsável', 'Prazo', 'status'],
                             use_container_width=True,
-                            key="editor_cobranca"
+                            key="editor_cobranca_segura"
                         )
                         
-                        acoes_para_cobrar = df_selecao[df_selecao['Cobrar?'] == True].drop(columns=['Cobrar?'])
+                        acoes_para_cobrar = df_selecao[df_selecao['Cobrar?'] == True]
                         
                         if not acoes_para_cobrar.empty:
-                            st.markdown("#### ⚙️ Configuração do Disparador (Qualquer usuário pode usar)")
+                            st.markdown("#### ⚙️ Destinatários e Assunto")
+                            col_e1, col_e2 = st.columns(2)
+                            with col_e1:
+                                email_destinatarios = st.text_area("Lista de E-mails (Separe por vírgula)", placeholder="gerente@unicharm.com, coordenador@unicharm.com, equipe@unicharm.com")
+                            with col_e2:
+                                assunto_email = st.text_input("Assunto do Alerta", value=f"ALERTA: Planos de Ação Operacionais Atrasados - {datetime.now().strftime('%d/%m/%Y')}")
                             
-                            em_c1, em_c2 = st.columns(2)
-                            with em_c1:
-                                provedor = st.selectbox("Provedor de E-mail", ["Gmail", "Outlook / Office365", "Servidor SMTP Customizado"])
-                                email_remetente = st.text_input("Seu E-mail (Remetente)", placeholder="usuario@empresa.com")
-                                senha_remetente = st.text_input("Sua Senha / Senha de App", type="password", help="Para contas Gmail/Outlook, utilize uma 'Senha de Aplicativo' gerada nas configurações da sua conta de e-mail por segurança.")
-                            
-                            with em_c2:
-                                email_destinatarios = st.text_area("E-mails dos Destinatários (Separe por vírgula)", placeholder="gerente@empresa.com, coordenador@empresa.com, equipe@empresa.com")
-                                assunto_email = st.text_input("Assunto do E-mail", value=f"⚠️ ALERTA: Planos de Ação Operacionais Atrasados - {datetime.now().strftime('%d/%m/%Y')}")
-                            
-                            # Configurações avançadas caso escolha SMTP Customizado
-                            if provedor == "Servidor SMTP Customizado":
-                                c_srv1, c_srv2 = st.columns(2)
-                                with c_srv1: smtp_server = st.text_input("Servidor SMTP (Ex: smtp.host.com)")
-                                with c_srv2: smtp_port = st.number_input("Porta SMTP", value=587)
-                            elif provedor == "Gmail":
-                                smtp_server, smtp_port = "smtp.gmail.com", 587
-                            else: # Outlook
-                                smtp_server, smtp_port = "smtp.office365.com", 587
+                            if email_destinatarios.strip():
+                                # Como mailto não renderiza tabelas HTML complexas em todos os clientes, 
+                                # criamos um formato de texto limpo, altamente visual e profissional com blocos.
+                                corpo_texto = "Prezada Equipe,\n\n"
+                                corpo_texto += "Identificamos em nosso ecossistema industrial que as seguintes ações estão com o prazo de solução ESTOURADO e pendentes de atualização:\n\n"
+                                corpo_texto += "==================================================\n"
                                 
-                            if st.button("🚀 DISPARAR COBRANÇA COLETIVA POR E-MAIL", type="primary", use_container_width=True):
-                                if not email_remetente or not senha_remetente or not email_destinatarios:
-                                    st.error("⚠️ Por favor, preencha o seu e-mail, senha e os e-mails dos destinatários!")
-                                else:
-                                    import smtplib
-                                    from email.mime.multipart import MIMEMultipart
-                                    from email.mime.text import MIMEText
-                                    
-                                    try:
-                                        # Construindo o corpo em HTML Premium
-                                        lista_destinatarios = [e.strip() for e in email_destinatarios.split(",") if e.strip() != ""]
-                                        
-                                        msg = MIMEMultipart()
-                                        msg['From'] = email_remetente
-                                        msg['To'] = ", ".join(lista_destinatarios)
-                                        msg['Subject'] = assunto_email
-                                        
-                                        # Montando as linhas da tabela HTML dinamicamente
-                                        linhas_tabela_html = ""
-                                        for _, acao in acoes_para_cobrar.iterrows():
-                                            linhas_tabela_html += f"""
-                                            <tr>
-                                                <td style="border: 1px solid #e2e8f0; padding: 10px; font-size: 13px;">{acao['Origem']}</td>
-                                                <td style="border: 1px solid #e2e8f0; padding: 10px; font-size: 13px; font-weight: bold;">{acao['Máquina']}</td>
-                                                <td style="border: 1px solid #e2e8f0; padding: 10px; font-size: 13px; color: #475569;">{acao['Problema / Ofensor']}</td>
-                                                <td style="border: 1px solid #e2e8f0; padding: 10px; font-size: 13px; font-weight: bold; color: #b91c1c;">{acao['O que Fazer']}</td>
-                                                <td style="border: 1px solid #e2e8f0; padding: 10px; font-size: 13px; background-color: #fef2f2; color: #991b1b; font-weight: bold; text-align: center;">{acao['Responsável']}</td>
-                                                <td style="border: 1px solid #e2e8f0; padding: 10px; font-size: 13px; text-align: center; color: #ef4444; font-weight: bold;">{acao['Prazo']}</td>
-                                            </tr>
-                                            """
-                                        
-                                        corpo_html = f"""
-                                        <html>
-                                        <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1e293b; background-color: #ffffff; padding: 20px;">
-                                            <div style="max-width: 800px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-                                                <div style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); padding: 20px; color: white; text-align: center;">
-                                                    <h2 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: 0.5px;">🏭 ALERTA DE PLANOS DE AÇÃO OPERACIONAIS ATRASADOS</h2>
-                                                    <p style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;">Notificação Automática do Hub de Analytics Industrial</p>
-                                                </div>
-                                                <div style="padding: 25px; background-color: #ffffff;">
-                                                    <p style="font-size: 15px; line-height: 1.6; color: #334155;">
-                                                        Olá Equipe,<br><br>
-                                                        Identificamos em nosso ecossistema de produção que as ações listadas abaixo <b>estão com o prazo de solução estourado</b> e ainda não foram resolvidas no sistema. 
-                                                    </p>
-                                                    <p style="font-size: 14px; color: #64748b; font-style: italic; margin-bottom: 20px;">
-                                                        👉 Solicitamos aos responsáveis foco imediato na tratativa e atualização do status na mesa de acompanhamento.
-                                                    </p>
-                                                    
-                                                    <table style="width: 100%; border-collapse: collapse; margin-top: 15px; min-width: 600px;">
-                                                        <thead>
-                                                            <tr style="background-color: #f8fafc; color: #0f172a; text-align: left; font-weight: 700; font-size: 13px;">
-                                                                <th style="border: 1px solid #e2e8f0; padding: 12px;">Origem</th>
-                                                                <th style="border: 1px solid #e2e8f0; padding: 12px;">Máquina</th>
-                                                                <th style="border: 1px solid #e2e8f0; padding: 12px;">Ofensor / Problema</th>
-                                                                <th style="border: 1px solid #e2e8f0; padding: 12px;">Ação Bloqueante (O que fazer)</th>
-                                                                <th style="border: 1px solid #e2e8f0; padding: 12px; text-align: center;">Responsável</th>
-                                                                <th style="border: 1px solid #e2e8f0; padding: 12px; text-align: center;">Prazo</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {linhas_tabela_html}
-                                                        </tbody>
-                                                    </table>
-                                                    
-                                                    <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 30px 0 20px 0;">
-                                                    <p style="font-size: 11px; color: #94a3b8; text-align: center; margin: 0;">
-                                                        E-mail enviado por iniciativa de <b>{st.session_state['usuario_logado'].upper()}</b> via Industrial Analytics Hub.<br>
-                                                        Por favor, não responda diretamente a este e-mail do sistema.
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </body>
-                                        </html>
-                                        """
-                                        
-                                        msg.attach(MIMEText(corpo_html, 'html'))
-                                        
-                                        # Inicializando servidor de e-mail de forma dinâmica
-                                        with st.spinner("Conectando ao servidor SMTP e enviando e-mails..."):
-                                            server = smtplib.SMTP(smtp_server, smtp_port)
-                                            server.starttls()
-                                            server.login(email_remetente, senha_remetente)
-                                            server.sendmail(email_remetente, lista_destinatarios, msg.as_string())
-                                            server.quit()
-                                            
-                                        st.success(f"🚀 Cobrança enviada com sucesso para {len(lista_destinatarios)} destinatário(s)!")
-                                    except Exception as err:
-                                        st.error(f"⚠️ Erro ao tentar enviar e-mail: {err}. Verifique se suas credenciais ou configurações SMTP estão corretas.")
+                                for _, acao in acoes_para_cobrar.iterrows():
+                                    corpo_texto += f"📌 [MÁQUINA {acao['Máquina']}] - Origem: {acao['Origem']}\n"
+                                    corpo_texto += f"❌ Ofensor: {acao['Problema / Ofensor']}\n"
+                                    corpo_texto += f"🛠️ Ação: {acao['O que Fazer']}\n"
+                                    corpo_texto += f"👤 RESPONSÁVEL: {acao['Responsável']}\n"
+                                    corpo_texto += f"⚠️ PRAZO EXPIRADO: {acao['Prazo']}\n"
+                                    corpo_texto += "--------------------------------------------------\n"
+                                
+                                corpo_texto += "\nSolicitamos aos envolvidos foco imediato no fechamento e atualização do status no Industrial Analytics Hub.\n\n"
+                                corpo_texto += f"Atenciosamente,\nControle de Processos\nEnviado por: {st.session_state['usuario_logado'].upper()}"
+                                
+                                # Codificação segura de caracteres para URL (Protocolo mailto)
+                                from urllib.parse import quote
+                                mailto_url = f"mailto:{email_destinatarios}?subject={quote(assunto_email)}&body={quote(corpo_texto)}"
+                                
+                                st.markdown("<br>", unsafe_allow_html=True)
+                                # Botão HTML estilizado para disparar o mailto nativo
+                                botao_html = f"""
+                                    <a href="{mailto_url}" target="_blank" style="text-decoration: none;">
+                                        <div style="background-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%); 
+                                                    background-color: #10b981; color: white; text-align: center; 
+                                                    padding: 14px 20px; font-weight: bold; border-radius: 8px; 
+                                                    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2); cursor: pointer;
+                                                    transition: background-color 0.2s;">
+                                            🚀 ABRIR NO OUTLOOK E DISPARAR COBRANÇA
+                                        </div>
+                                    </a>
+                                """
+                                st.markdown(botao_html, unsafe_allow_html=True)
+                            else:
+                                st.warning("⚠️ Insira pelo menos um e-mail de destino para liberar o botão de disparo.")
                         else:
-                            st.info("💡 Marque a caixa 'Cobrar?' na tabela acima nas ações que deseja incluir no e-mail.")
+                            st.info("💡 Marque a caixa 'Cobrar?' na tabela acima para selecionar as ações pendentes.")
                 
                 st.markdown("<br>", unsafe_allow_html=True)
-                # --- FIM DO BLOCO DE E-MAIL ---
-
+                
+                # Mantém as abas de visualização originais intactas abaixo
                 aba_p, aba_and, aba_ok = st.tabs(["🔴 AÇÕES PENDENTES", "🟡 AÇÕES EM ANDAMENTO", "🟢 AÇÕES REALIZADAS"])
                 colunas_exibicao = ["Origem", "Máquina", "Problema / Ofensor", "O que Fazer", "Responsável", "Prazo"]
                 
