@@ -740,7 +740,7 @@ else:
         # =========================================================
         elif menu == "📋 PAINEL UNIFICADO DE AÇÕES":
             st.markdown("## 📋 Painel Unificado de Ações Industriais (Central de Cobrança)")
-            st.caption("Esta tela compila em tempo real todas as ações e permite gerar cobranças integradas ao Outlook corporativo de forma segura.")
+            st.caption("Esta tela compila todas as ações em tempo real e permite gerar cobranças integradas ao seu Gmail/Cliente de e-mail.")
             
             engine = obter_engine()
             df_ac_rep = pd.read_sql_query("""
@@ -757,9 +757,9 @@ else:
             if df_unificado.empty: 
                 st.info("Nenhuma ação cadastrada no sistema.")
             else:
+                # --- [Cards de Status mantidos] ---
                 status_cards = ["Pendente", "Em Andamento", "Resolvido"]
                 cores_cards = ["#ef4444", "#f59e0b", "#10b981"]
-                
                 cols_cards = st.columns(3)
                 for i, st_name in enumerate(status_cards):
                     total_st = len(df_unificado[df_unificado['status'] == st_name])
@@ -772,103 +772,59 @@ else:
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                # --- SISTEMA SEGURO DE COBRANÇA CORPORATIVA ---
-                st.markdown("<div class='section-header'>📧 CENTRAL TRANSMISSORA - COBRANÇA DE ATRASOS (COMPATÍVEL UNICHARM)</div>", unsafe_allow_html=True)
+                # --- SISTEMA SEGURO DE COBRANÇA (COMPATÍVEL COM GMAIL) ---
+                st.markdown("<div class='section-header'>📧 CENTRAL TRANSMISSORA - GERAÇÃO DE COBRANÇA PARA GMAIL</div>", unsafe_allow_html=True)
                 
                 df_nao_resolvidas = df_unificado[df_unificado['status'].isin(["Pendente", "Em Andamento"])].copy()
                 
                 if df_nao_resolvidas.empty:
                     st.success("✨ Excelente! Não existem ações pendentes ou em andamento para cobrar.")
                 else:
-                    with st.expander("📢 PREPARAR COBRANÇA COLETIVA PARA A EQUIPE", expanded=True):
+                    with st.expander("📢 PREPARAR COBRANÇA PARA A EQUIPE", expanded=True):
                         st.markdown("""
                             <p style='font-size:0.85rem; color:#64748b;'>
-                            Selecione na tabela abaixo as ações que estão com o prazo estourado. O sistema gerará a estrutura 
-                            e abrirá seu <b>Outlook corporativo</b> de forma segura para o envio final, sem pedir senhas.
+                            Selecione as ações abaixo e clique no botão para abrir o <b>Gmail</b> (ou e-mail padrão) com o rascunho pronto para envio.
                             </p>
                         """, unsafe_allow_html=True)
                         
-                        # Tabela para seleção manual
                         df_nao_resolvidas['Cobrar?'] = False
                         df_selecao = st.data_editor(
                             df_nao_resolvidas[['Cobrar?', 'Origem', 'Máquina', 'Problema / Ofensor', 'O que Fazer', 'Responsável', 'Prazo', 'status']],
                             disabled=['Origem', 'Máquina', 'Problema / Ofensor', 'O que Fazer', 'Responsável', 'Prazo', 'status'],
                             use_container_width=True,
-                            key="editor_cobranca_segura"
+                            key="editor_cobranca_gmail"
                         )
                         
                         acoes_para_cobrar = df_selecao[df_selecao['Cobrar?'] == True]
                         
                         if not acoes_para_cobrar.empty:
-                            st.markdown("#### ⚙️ Destinatários e Assunto")
                             col_e1, col_e2 = st.columns(2)
                             with col_e1:
-                                email_destinatarios = st.text_area("Lista de E-mails (Separe por vírgula)", placeholder="gerente@unicharm.com, coordenador@unicharm.com, equipe@unicharm.com")
+                                email_destinatarios = st.text_area("Lista de E-mails (Separe por vírgula)", placeholder="equipe@unicharm.com")
                             with col_e2:
-                                assunto_email = st.text_input("Assunto do Alerta", value=f"ALERTA: Planos de Ação Operacionais Atrasados - {datetime.now().strftime('%d/%m/%Y')}")
+                                assunto_email = st.text_input("Assunto do Alerta", value=f"ALERTA: Planos de Ação Pendentes - {datetime.now().strftime('%d/%m/%Y')}")
                             
                             if email_destinatarios.strip():
-                                # Como mailto não renderiza tabelas HTML complexas em todos os clientes, 
-                                # criamos um formato de texto limpo, altamente visual e profissional com blocos.
+                                # Formato de texto para o e-mail
                                 corpo_texto = "Prezada Equipe,\n\n"
-                                corpo_texto += "Identificamos em nosso ecossistema industrial que as seguintes ações estão com o prazo de solução ESTOURADO e pendentes de atualização:\n\n"
-                                corpo_texto += "==================================================\n"
-                                
+                                corpo_texto += "Seguem abaixo as ações pendentes que requerem atenção imediata:\n\n"
                                 for _, acao in acoes_para_cobrar.iterrows():
-                                    corpo_texto += f"📌 [MÁQUINA {acao['Máquina']}] - Origem: {acao['Origem']}\n"
-                                    corpo_texto += f"❌ Ofensor: {acao['Problema / Ofensor']}\n"
-                                    corpo_texto += f"🛠️ Ação: {acao['O que Fazer']}\n"
-                                    corpo_texto += f"👤 RESPONSÁVEL: {acao['Responsável']}\n"
-                                    corpo_texto += f"⚠️ PRAZO EXPIRADO: {acao['Prazo']}\n"
-                                    corpo_texto += "--------------------------------------------------\n"
+                                    corpo_texto += f"• MÁQ: {acao['Máquina']} | Ação: {acao['O que Fazer']} | Resp: {acao['Responsável']} | Prazo: {acao['Prazo']}\n"
+                                corpo_texto += "\nFavor atualizar o status no sistema. Obrigado."
                                 
-                                corpo_texto += "\nSolicitamos aos envolvidos foco imediato no fechamento e atualização do status no Industrial Analytics Hub.\n\n"
-                                corpo_texto += f"Atenciosamente,\nControle de Processos\nEnviado por: {st.session_state['usuario_logado'].upper()}"
-                                
-                                # Codificação segura de caracteres para URL (Protocolo mailto)
                                 from urllib.parse import quote
                                 mailto_url = f"mailto:{email_destinatarios}?subject={quote(assunto_email)}&body={quote(corpo_texto)}"
                                 
-                                st.markdown("<br>", unsafe_allow_html=True)
-                                # Botão HTML estilizado para disparar o mailto nativo
-                                botao_html = f"""
+                                st.markdown(f"""
                                     <a href="{mailto_url}" target="_blank" style="text-decoration: none;">
-                                        <div style="background-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%); 
-                                                    background-color: #10b981; color: white; text-align: center; 
-                                                    padding: 14px 20px; font-weight: bold; border-radius: 8px; 
-                                                    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2); cursor: pointer;
-                                                    transition: background-color 0.2s;">
-                                            🚀 ABRIR NO OUTLOOK E DISPARAR COBRANÇA
+                                        <div style="background-color: #d93025; color: white; text-align: center; padding: 14px 20px; font-weight: bold; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); cursor: pointer;">
+                                            🚀 ABRIR NO GMAIL E DISPARAR COBRANÇA
                                         </div>
                                     </a>
-                                """
-                                st.markdown(botao_html, unsafe_allow_html=True)
-                            else:
-                                st.warning("⚠️ Insira pelo menos um e-mail de destino para liberar o botão de disparo.")
+                                """, unsafe_allow_html=True)
                         else:
-                            st.info("💡 Marque a caixa 'Cobrar?' na tabela acima para selecionar as ações pendentes.")
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                
-                # Mantém as abas de visualização originais intactas abaixo
-                aba_p, aba_and, aba_ok = st.tabs(["🔴 AÇÕES PENDENTES", "🟡 AÇÕES EM ANDAMENTO", "🟢 AÇÕES REALIZADAS"])
-                colunas_exibicao = ["Origem", "Máquina", "Problema / Ofensor", "O que Fazer", "Responsável", "Prazo"]
-                
-                with aba_p:
-                    df_p = df_unificado[df_unificado['status'] == "Pendente"]
-                    if df_p.empty: st.success("🎉 Nenhuma ação pendente! Tudo em andamento ou resolvido.")
-                    else: st.dataframe(df_p[colunas_exibicao], use_container_width=True)
-                    
-                with aba_and:
-                    df_and = df_unificado[df_unificado['status'] == "Em Andamento"]
-                    if df_and.empty: st.info("Nenhuma ação em andamento no momento.")
-                    else: st.dataframe(df_and[colunas_exibicao], use_container_width=True)
-                    
-                with aba_ok:
-                    df_ok = df_unificado[df_unificado['status'] == "Resolvido"]
-                    if df_ok.empty: st.warning("Ainda não temos ações concluídas gravadas na nuvem.")
-                    else: st.dataframe(df_ok[colunas_exibicao], use_container_width=True)
-        # =========================================================
+                            st.info("💡 Marque a caixa 'Cobrar?' na tabela acima.")
+                            
         # 📋 ABA: RELATÓRIO CONSOLIDADO DE OCORRÊNCIAS OPERACIONAIS
         # =========================================================
         elif menu == "📋 RELATÓRIO CONSOLIDADO":
