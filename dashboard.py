@@ -35,16 +35,21 @@ def validar_forca_senha(senha):
         erros.append("Pelo menos 1 caractere especial (@, #, $, %, etc.)")
     return erros
 
+# === SUBSTITUA APENAS A FUNÇÃO init_db() POR ESTA AQUI ===
+
 def init_db():
     engine = obter_engine()
+    
+    # 1. Criação isolada da tabela de Usuários
     with engine.begin() as conn:
-        # Tabela de Usuários com controle de cargos
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS usuarios (
                 id SERIAL PRIMARY KEY, login TEXT UNIQUE, senha TEXT, cargo TEXT
             )
         """))
-        # Tabela de Reportes Diários de Turno (Cabeçalho da Análise)
+        
+    # 2. Criação isolada da tabela de Reportes
+    with engine.begin() as conn:
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS reportes (
                 id SERIAL PRIMARY KEY, data_registro TEXT, turno TEXT, coordenador TEXT,
@@ -52,40 +57,50 @@ def init_db():
                 pq1 TEXT, pq2 TEXT, pq3 TEXT, pq4 TEXT, pq5 TEXT
             )
         """))
-        # Migração automática: Adiciona duracao se não existir (Evita ProgrammingError)
+        
+    # 3. Tentativa isolada de adicionar a coluna 'duracao' em reportes
+    with engine.begin() as conn:
         try:
             conn.execute(text("ALTER TABLE reportes ADD COLUMN duracao TEXT;"))
-        except:
-            pass
+        except Exception:
+            pass # Se a coluna já existir, ignora o erro sem travar o banco
 
-        # Tabela de Ações Relacionadas aos Reportes Diários (1 para Muitos)
+    # 4. Criação isolada da tabela de Ações de Reportes
+    with engine.begin() as conn:
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS acoes_reportes (
                 id SERIAL PRIMARY KEY, reporte_id INTEGER REFERENCES reportes(id) ON DELETE CASCADE,
                 oque TEXT, quem TEXT, quando TEXT, status TEXT
             )
         """))
-        # Tabela de Análises Semanais dos Operadores (Cabeçalho da Análise)
+        
+    # 5. Criação isolada da tabela de Análises Semanais
+    with engine.begin() as conn:
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS analises_semanais (
                 id SERIAL PRIMARY KEY, data_registro TEXT, turno TEXT, maquina TEXT,
                 pior_parada TEXT, pq1 TEXT, pq2 TEXT, pq3 TEXT, pq4 TEXT, pq5 TEXT, causa_raiz TEXT
             )
         """))
-        # Migração automática para tabela semanal
+        
+    # 6. Tentativa isolada de adicionar a coluna 'duracao' em análises semanais
+    with engine.begin() as conn:
         try:
             conn.execute(text("ALTER TABLE analises_semanais ADD COLUMN duracao TEXT;"))
-        except:
-            pass
+        except Exception:
+            pass # Se a coluna já existir, ignora o erro sem travar o banco
 
-        # Tabela de Ações Relacionadas às Análises Semanais (1 para Muitos)
+    # 7. Criação isolada da tabela de Ações Semanais
+    with engine.begin() as conn:
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS acoes_semanais (
                 id SERIAL PRIMARY KEY, analise_id INTEGER REFERENCES analises_semanais(id) ON DELETE CASCADE,
                 oque TEXT, quem TEXT, quando TEXT, status TEXT
             )
         """))
-        # Tabela de Nippo Coordenadores
+        
+    # 8. Criação isolada da tabela Nippo Coordenadores
+    with engine.begin() as conn:
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS nippo_coordenadores (
                 id SERIAL PRIMARY KEY, data TEXT, turno TEXT, coordenador TEXT, tecnico TEXT, maquina TEXT,
@@ -94,7 +109,6 @@ def init_db():
                 data_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """))
-
 # Executa a inicialização das tabelas na nuvem
 try:
     init_db()
