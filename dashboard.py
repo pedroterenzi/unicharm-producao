@@ -8,6 +8,7 @@ from sqlalchemy import create_engine, text
 import io
 import hashlib
 import re
+from urllib.parse import quote
 
 # 1. CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(layout="wide", page_title="Industrial Analytics Hub", page_icon="⚙️")
@@ -32,7 +33,7 @@ def validar_forca_senha(senha):
     if not re.search(r"[A-Z]", senha): erros.append("Pelo menos 1 letra MAIÚSCULA")
     if not re.search(r"[0-9]", senha): erros.append("Pelo menos 1 número")
     if not re.search(r"[@#\$%\^&\*!\+=\-\[\]\{\}\(\)\|\:\;\,\.\?\/\~\`\_\\]", senha):
-        erros.append("Pelo menos 1 caratere especial (@, #, $, %, etc.)")
+        erros.append("Pelo menos 1 caractere especial (@, #, $, %, etc.)")
     return erros
 
 def init_db():
@@ -393,7 +394,6 @@ else:
                     corpo_lideranca += "Solicitamos a todos os responsáveis atenção máxima nos desvios apontados e foco na execução dos planos bloqueantes.\n\n"
                     corpo_lideranca += f"Atenciosamente,\nIndustrial Analytics Hub\nEmitido por: {st.session_state['usuario_logado'].upper()}"
                     
-                    from urllib.parse import quote
                     gmail_lideranca_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={quote(lista_para_lideranca)}&su={quote(assunto_lideranca)}&body={quote(corpo_lideranca)}"
                     
                     st.markdown(f"""
@@ -405,7 +405,6 @@ else:
                     """, unsafe_allow_html=True)
             
             st.markdown("<br>", unsafe_allow_html=True)
-            # --- FIM DO BLOCO DE E-MAIL ---
 
             st.markdown("<div class='section-header'>Gaps / Ganhos de Peças (Comparativo por Máquina)</div>", unsafe_allow_html=True)
             col_t1, col_t2 = st.columns(2)
@@ -661,7 +660,7 @@ else:
                         reg_5pq = df_busca_db.iloc[0]
                         st.markdown(f"""
                         <div class="five-why-box" style="border-left: 6px solid #ef4444; background-color:#fafafa;">
-                            <h3 style="color:#b91c1c; margin:0;">🎯 Ofensor Analisado: {reg_5pq['pior_parada']}</h3>
+                            <h3 style="color:#b91c1c; margin:0;">🎯 Ofensor Analisado (ID #{reg_5pq['id']}): {reg_5pq['pior_parada']}</h3>
                             <h5 style="color:#475569; margin-top:5px; margin-bottom:15px;">⏱️ TEMPO ACUMULADO DE INDISPONIBILIDADE: {reg_5pq['duracao']}</h5>
                             <div class="five-why-line"><b>1º Por que?</b> {reg_5pq['pq1']}</div>
                             <div class="five-why-line"><b>2º Por que?</b> {reg_5pq['pq2']}</div>
@@ -913,20 +912,42 @@ else:
                             st.session_state['mostrar_edicao_semanal'] = False; st.rerun()
 
     # =========================================================
-    # 📋 PAINEL UNIFICADO DE AÇÕES
+    # 📋 PAINEL UNIFICADO DE AÇÕES (COM CORREÇÃO DE VÍNCULO DE ID)
     # =========================================================
     elif menu == "📋 PAINEL UNIFICADO DE AÇÕES":
         st.markdown("## 📋 Painel Unificado de Ações Industriais (Central de Cobrança)")
         st.caption("Esta tela compila em tempo real todas as ações (Reportes Diários + Análises Semanais) divididas por Status.")
         
         engine = obter_engine()
+        # --- AJUSTE VITAL: SELECIONANDO r.id / ans.id COMO "ID Análise" ---
         df_ac_rep = pd.read_sql_query("""
-            SELECT 'DIÁRIO' as "Origem", r.maq_analisada as "Máquina", r.problema as "Problema / Ofensor", ar.oque as "O que Fazer", ar.quem as "Responsável", ar.quando as "Prazo", ar.status 
-            FROM acoes_reportes ar JOIN reportes r ON ar.reporte_id = r.id
+            SELECT 
+                r.id as "ID Análise", 
+                ar.id as "ID Ação",
+                'DIÁRIO' as "Origem", 
+                r.maq_analisada as "Máquina", 
+                r.problema as "Problema / Ofensor", 
+                ar.oque as "O que Fazer", 
+                ar.quem as "Responsável", 
+                ar.quando as "Prazo", 
+                ar.status 
+            FROM acoes_reportes ar 
+            JOIN reportes r ON ar.reporte_id = r.id
         """, engine)
+        
         df_ac_sem = pd.read_sql_query("""
-            SELECT 'SEMANAL' as "Origem", ans.maquina as "Máquina", ans.pior_parada as "Problema / Ofensor", asm.oque as "O que Fazer", asm.quem as "Responsável", asm.quando as "Prazo", asm.status 
-            FROM acoes_semanais asm JOIN analises_semanais ans ON asm.analise_id = ans.id
+            SELECT 
+                ans.id as "ID Análise", 
+                asm.id as "ID Ação",
+                'SEMANAL' as "Origem", 
+                ans.maquina as "Máquina", 
+                ans.pior_parada as "Problema / Ofensor", 
+                asm.oque as "O que Fazer", 
+                asm.quem as "Responsável", 
+                asm.quando as "Prazo", 
+                asm.status 
+            FROM acoes_semanais asm 
+            JOIN analises_semanais ans ON asm.analise_id = ans.id
         """, engine)
         
         df_unificado = pd.concat([df_ac_rep, df_ac_sem], ignore_index=True)
@@ -958,9 +979,11 @@ else:
                     st.markdown("<p style='font-size:0.85rem; color:#64748b;'>Selecione abaixo as ações com prazo estourado que deseja incluir na cobrança geral para a equipe.</p>", unsafe_allow_html=True)
                     
                     df_nao_resolvidas['Cobrar?'] = False
+                    colunas_editor = ['Cobrar?', 'ID Análise', 'ID Ação', 'Origem', 'Máquina', 'Problema / Ofensor', 'O que Fazer', 'Responsável', 'Prazo', 'status']
+                    
                     df_selecao = st.data_editor(
-                        df_nao_resolvidas[['Cobrar?', 'Origem', 'Máquina', 'Problema / Ofensor', 'O que Fazer', 'Responsável', 'Prazo', 'status']],
-                        disabled=['Origem', 'Máquina', 'Problema / Ofensor', 'O que Fazer', 'Responsável', 'Prazo', 'status'],
+                        df_nao_resolvidas[colunas_editor],
+                        disabled=['ID Análise', 'ID Ação', 'Origem', 'Máquina', 'Problema / Ofensor', 'O que Fazer', 'Responsável', 'Prazo', 'status'],
                         use_container_width=True,
                         key="editor_cobranca_hub"
                     )
@@ -981,6 +1004,8 @@ else:
                         
                         for _, acao in acoes_filtradas.iterrows():
                             corpo_texto += f"📌 [MÁQUINA {acao['Máquina']}] - Tipo: {acao['Origem']}\n"
+                            # AQUI ESTÁ A CORREÇÃO VITAL DO ID PARA A PESSOA CONSULTAR DIRETO
+                            corpo_texto += f"🆔 ID da Análise (Para busca no Hub): #{acao['ID Análise']}\n"
                             corpo_texto += f"❌ Ofensor: {acao['Problema / Ofensor']}\n"
                             corpo_texto += f"🛠️ O que fazer: {acao['O que Fazer']}\n"
                             corpo_texto += f"👤 Responsável: {acao['Responsável']}\n"
@@ -990,7 +1015,6 @@ else:
                         corpo_texto += "\nSolicitamos foco imediato na tratativa e atualização no Industrial Analytics Hub.\n\n"
                         corpo_texto += f"Atenciosamente,\nControle de Processos\nEmitido por: {st.session_state['usuario_logado'].upper()}"
                         
-                        from urllib.parse import quote
                         gmail_web_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={quote(lista_para)}&su={quote(assunto_mail)}&body={quote(corpo_texto)}"
                         
                         st.markdown(f"""
@@ -1007,9 +1031,9 @@ else:
             
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- EXIBIÇÃO ORIGINAL DAS SUAS ABAS DE STATUS ---
+            # --- EXIBIÇÃO DAS ABAS DE STATUS COM COLUNAS DE ID LINKADAS ---
             aba_p, aba_and, aba_ok = st.tabs(["🔴 AÇÕES PENDENTES", "🟡 AÇÕES EM ANDAMENTO", "🟢 AÇÕES REALIZADAS"])
-            colunas_exibicao = ["Origem", "Máquina", "Problema / Ofensor", "O que Fazer", "Responsável", "Prazo"]
+            colunas_exibicao = ["ID Análise", "ID Ação", "Origem", "Máquina", "Problema / Ofensor", "O que Fazer", "Responsável", "Prazo"]
             
             with aba_p:
                 df_p = df_unificado[df_unificado['status'] == "Pendente"]
@@ -1068,7 +1092,7 @@ else:
                     corpo_matinal += "==================================================\n\n"
                     
                     for _, r in df_reportes_dia.iterrows():
-                        corpo_matinal += f"⚙️ Turno {r['turno']} — Máquina: {r['maq_analisada']} | Ofensor: {r['problema']}\n"
+                        corpo_matinal += f"⚙️ Turno {r['turno']} — Máquina: {r['maq_analisada']} | Ofensor: {r['problema']} (ID Análise: #{r['id']})\n"
                         corpo_matinal += f"⏱️ DURAÇÃO DA PARADA: {r['duracao']}\n\n"
                         corpo_matinal += f"   1º Por que? {r['pq1']}\n"
                         corpo_matinal += f"   2º Por que? {r['pq2']}\n"
@@ -1088,7 +1112,6 @@ else:
                         
                     corpo_matinal += f"Relatório gerado via Industrial Analytics Hub por: {st.session_state['usuario_logado'].upper()}"
                     
-                    from urllib.parse import quote
                     gmail_matinal_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={quote(lista_para_matinal)}&su={quote(assunto_matinal)}&body={quote(corpo_matinal)}"
                     
                     st.markdown(f"""
@@ -1101,7 +1124,7 @@ else:
             
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- EXIBIÇÃO VISUAL ORIGINAL DA TELA ---
+            # --- EXIBIÇÃO VISUAL DA TELA ---
             st.markdown("<div class='section-header'>📋 SUMÁRIO EXECUTIVO — PRINCIPAIS OCORRÊNCIAS DO DIA</div>", unsafe_allow_html=True)
             for _, r in df_reportes_dia.iterrows():
                 st.markdown(f"🔹 **Turno {r['turno']}** (Coordenador: {r['coordenador']})")
@@ -1111,7 +1134,7 @@ else:
             for _, r in df_reportes_dia.iterrows():
                 st.markdown(f"""
                 <div class="five-why-box">
-                    <h4 style="color:#059669; margin:0;">⚙️ Turno {r['turno']} — Máquina: {r['maq_analisada']} | Ofensor: {r['problema']}</h4>
+                    <h4 style="color:#059669; margin:0;">⚙️ Turno {r['turno']} — Máquina: {r['maq_analisada']} | Ofensor: {r['problema']} (ID Análise: #{r['id']})</h4>
                     <h5 style="color:#e11d48; margin-top:5px; margin-bottom:15px;">⏱ DURAÇÃO DA PARADA: {r['duracao']}</h5>
                     <div class="five-why-line"><b>1º Por que?</b> {r['pq1']}</div>
                     <div class="five-why-line"><b>2º Por que?</b> {r['pq2']}</div>
