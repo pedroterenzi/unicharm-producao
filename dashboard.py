@@ -830,14 +830,14 @@ else:
                 )
 
     # =========================================================
-    # ABA: MATRIZ DIÁRIA POR MÁQUINA (NOVA VISÃO ADICIONADA)
+    # ABA: MATRIZ DIÁRIA POR MÁQUINA (DESDOBRADA EM 3 TURNOS)
     # =========================================================
     elif menu == "📊 MATRIZ DIÁRIA POR MÁQUINA":
         if verificar_arquivo_carregado():
-            st.markdown("## 📊 Visão Matriz Diária por Máquina")
+            st.markdown("## 📊 Visão Matriz Diária por Máquina (Por Turno)")
             st.caption(
-                "Consolidado diário estático das 7 máquinas (M1 a M7) filtrado"
-                " exclusivamente por Data."
+                "Consolidado diário estático das 7 máquinas (M1 a M7) separado"
+                " individualmente para o 1º, 2º e 3º Turno."
             )
 
             # Filtro exclusivo por DATA
@@ -848,82 +848,87 @@ else:
             )
 
             # Filtrar dataframe de ordens pela data selecionada
-            df_dia_f = df_order[df_order["Data"].dt.date == data_visao]
-
-            # Lista estática das 7 máquinas
-            maquinas_estaticas = [str(i) for i in range(1, 8)]
-
-            # Agrupamento dos dados acumulados do dia por máquina
-            df_grp = (
-                df_dia_f.groupby("Máquina")
-                .agg({
-                    "Machine Counter": "sum",
-                    "Peças Estoque - Ajuste": "sum",
-                    "Horário Padrão": "sum",
-                    "Run Time": "sum",
-                })
-                .reset_index()
+            df_dia_f = df_order[df_order["Data"].dt.date == data_visao].copy()
+            df_dia_f["Turno_Num"] = (
+                df_dia_f["Turno"].astype(str).str.extract(r"(\d+)")[0]
             )
 
-            # Construção estática garantindo a presença das máquinas M1 a M7
-            matriz_dados = []
-            for m in maquinas_estaticas:
-                row = df_grp[df_grp["Máquina"] == m]
-                if not row.empty:
-                    mc = row["Machine Counter"].values[0]
-                    pecas = row["Peças Estoque - Ajuste"].values[0]
-                    hp = row["Horário Padrão"].values[0]
-                    rt = row["Run Time"].values[0]
-                else:
-                    mc = 0
-                    pecas = 0
-                    hp = 0
-                    rt = 0
-
-                mov_perc = (rt / hp * 100) if hp > 0 else 0.0
-                loss_perc = ((mc - pecas) / mc * 100) if mc > 0 else 0.0
-
-                matriz_dados.append({
-                    "Máquina": f"MÁQUINA {m}",
-                    "Machine Counter": fmt(mc),
-                    "Peças Estoque - Ajuste": fmt(pecas),
-                    "Horário Padrão (min)": fmt(hp),
-                    "Run Time (min)": fmt(rt),
-                    "Movimentação %": f"{mov_perc:.2f}%".replace(".", ","),
-                    "Loss %": f"{loss_perc:.2f}%".replace(".", ","),
-                })
-
-            df_matriz_final = pd.DataFrame(matriz_dados)
-
-            # KPIs Totais do Dia Selecionado
-            tot_mc = (
-                df_grp["Machine Counter"].sum() if not df_grp.empty else 0
-            )
-            tot_pecas = (
-                df_grp["Peças Estoque - Ajuste"].sum()
-                if not df_grp.empty
-                else 0
-            )
-            tot_hp = df_grp["Horário Padrão"].sum() if not df_grp.empty else 0
-            tot_rt = df_grp["Run Time"].sum() if not df_grp.empty else 0
+            # KPIs Totais do Dia Completo
+            tot_mc_dia = df_dia_f["Machine Counter"].sum()
+            tot_pecas_dia = df_dia_f["Peças Estoque - Ajuste"].sum()
+            tot_hp_dia = df_dia_f["Horário Padrão"].sum()
+            tot_rt_dia = df_dia_f["Run Time"].sum()
 
             st.markdown(
                 f"""
                 <div class="metric-container">
-                    <div class="metric-card"><div class="metric-title">Machine Counter Total</div><div class="metric-value">{fmt(tot_mc)}</div></div>
-                    <div class="metric-card"><div class="metric-title">Peças Estoque Total</div><div class="metric-value">{fmt(tot_pecas)}</div></div>
-                    <div class="metric-card"><div class="metric-title">Horário Padrão Total</div><div class="metric-value">{fmt(tot_hp)} m</div></div>
-                    <div class="metric-card"><div class="metric-title">Run Time Total</div><div class="metric-value">{fmt(tot_rt)} m</div></div>
+                    <div class="metric-card"><div class="metric-title">Machine Counter Total (Dia)</div><div class="metric-value">{fmt(tot_mc_dia)}</div></div>
+                    <div class="metric-card"><div class="metric-title">Peças Estoque Total (Dia)</div><div class="metric-value">{fmt(tot_pecas_dia)}</div></div>
+                    <div class="metric-card"><div class="metric-title">Horário Padrão Total (Dia)</div><div class="metric-value">{fmt(tot_hp_dia)} m</div></div>
+                    <div class="metric-card"><div class="metric-title">Run Time Total (Dia)</div><div class="metric-value">{fmt(tot_rt_dia)} m</div></div>
                 </div>
             """,
                 unsafe_allow_html=True,
             )
 
-            st.markdown(
-                f"<div class='section-header'>📋 CONSOLIDADO POR MÁQUINA (1 A 7) — DATA: {data_visao.strftime('%d/%m/%Y')}</div>",
-                unsafe_allow_html=True,
-            )
-            st.table(df_matriz_final)
+            maquinas_estaticas = [str(i) for i in range(1, 8)]
+            turnos_definidos = [
+                ("1º TURNO", "1"),
+                ("2º TURNO", "2"),
+                ("3º TURNO", "3"),
+            ]
+
+            # Renderização sequencial das 3 tabelas (1º, 2º e 3º Turno)
+            for nome_turno, id_turno in turnos_definidos:
+                df_shift = df_dia_f[df_dia_f["Turno_Num"] == id_turno]
+
+                df_grp = (
+                    df_shift.groupby("Máquina")
+                    .agg({
+                        "Machine Counter": "sum",
+                        "Peças Estoque - Ajuste": "sum",
+                        "Horário Padrão": "sum",
+                        "Run Time": "sum",
+                    })
+                    .reset_index()
+                )
+
+                matriz_dados = []
+                for m in maquinas_estaticas:
+                    row = df_grp[df_grp["Máquina"] == m]
+                    if not row.empty:
+                        mc = row["Machine Counter"].values[0]
+                        pecas = row["Peças Estoque - Ajuste"].values[0]
+                        hp = row["Horário Padrão"].values[0]
+                        rt = row["Run Time"].values[0]
+                    else:
+                        mc = 0
+                        pecas = 0
+                        hp = 0
+                        rt = 0
+
+                    mov_perc = (rt / hp * 100) if hp > 0 else 0.0
+                    loss_perc = ((mc - pecas) / mc * 100) if mc > 0 else 0.0
+
+                    matriz_dados.append({
+                        "Máquina": f"MÁQUINA {m}",
+                        "Machine Counter": fmt(mc),
+                        "Peças Estoque - Ajuste": fmt(pecas),
+                        "Horário Padrão (min)": fmt(hp),
+                        "Run Time (min)": fmt(rt),
+                        "Movimentação %": f"{mov_perc:.2f}%".replace(".", ","),
+                        "Loss %": f"{loss_perc:.2f}%".replace(".", ","),
+                    })
+
+                df_matriz_final = pd.DataFrame(matriz_dados)
+
+                st.markdown(
+                    f"<div class='section-header'>📋 CONSOLIDADO POR MÁQUINA (1"
+                    f" A 7) — {nome_turno} | DATA:"
+                    f" {data_visao.strftime('%d/%m/%Y')}</div>",
+                    unsafe_allow_html=True,
+                )
+                st.table(df_matriz_final)
 
     # =========================================================
     # ABA: PERFORMANCE
