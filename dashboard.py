@@ -298,7 +298,7 @@ if not st.session_state['autenticado']:
 else:
     cargo = st.session_state['cargo_logado']
     todas_abas = [
-        "📋 REPORTE DIÁRIO", "📈 PERFORMANCE", "🛑 TOP 10 PARADAS", "📅 CALENDÁRIO", 
+        "📋 REPORTE DIÁRIO", "📊 RESUMO DIÁRIO POR MÁQUINA", "📈 PERFORMANCE", "🛑 TOP 10 PARADAS", "📅 CALENDÁRIO", 
         "📋 ANÁLISE SEMANAL", "📊 APRESENTAÇÃO SEMANAL", "📝 LANÇAR REPORTE", "📊 ACOMPANHAMENTO", 
         "📝 LANÇAR ANÁLISE SEMANAL", "📋 ACOMP. ANÁLISES SEMANAIS", "📋 PAINEL UNIFICADO DE AÇÕES", 
         "📋 RELATÓRIO CONSOLIDADO", "📋 NIPPO COORDENADORES"
@@ -433,6 +433,38 @@ else:
                 res['Perda %'] = ((res['Machine Counter'] - res['Peças Estoque - Ajuste']) / res['Machine Counter'].replace(0,1) * 100).apply(lambda x: f"{x:.2f}%".replace('.', ','))
                 res['Peças Estoque'] = res['Peças Estoque - Ajuste'].apply(fmt)
                 st.table(res[['Categoria','Máquina','Movimentação %','Perda %','Peças Estoque']])
+
+    # =========================================================
+    # ABA: RESUMO DIÁRIO POR MÁQUINA
+    # =========================================================
+    elif menu == "📊 RESUMO DIÁRIO POR MÁQUINA":
+        if verificar_arquivo_carregado():
+            st.markdown("## 📊 Resumo Diário por Máquina")
+            st.caption("Visão estática consolidada das 7 máquinas com os indicadores essenciais para a data selecionada.")
+            
+            # Filtro isolado de Data
+            data_resumo = st.date_input("Selecione a Data para Extração", df_order['Data'].max().date(), key="dt_resumo_maq")
+            
+            # Filtrar e agregar os dados de produção da data solicitada
+            df_dia = df_order[df_order['Data'].dt.date == data_resumo]
+            resumo = df_dia.groupby('Máquina').agg({
+                'Machine Counter': 'sum',
+                'Peças Estoque - Ajuste': 'sum',
+                'Horário Padrão': 'sum',
+                'Run Time': 'sum'
+            }).reset_index()
+            
+            # Garantir a listagem estática das 7 máquinas, cruzando com os dados
+            df_maquinas_base = pd.DataFrame({'Máquina': [str(i) for i in range(1, 8)]})
+            resumo_final = pd.merge(df_maquinas_base, resumo, on='Máquina', how='left').fillna(0)
+            
+            # Formatação amigável dos números para exibição
+            resumo_final['Machine Counter'] = resumo_final['Machine Counter'].apply(fmt)
+            resumo_final['Peças Estoque - Ajuste'] = resumo_final['Peças Estoque - Ajuste'].apply(fmt)
+            resumo_final['Horário Padrão'] = resumo_final['Horário Padrão'].apply(lambda x: f"{x:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+            resumo_final['Run Time'] = resumo_final['Run Time'].apply(lambda x: f"{x:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+            
+            st.dataframe(resumo_final, use_container_width=True, hide_index=True)
 
     # =========================================================
     # ABA: PERFORMANCE
