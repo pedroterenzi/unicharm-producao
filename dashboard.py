@@ -19,7 +19,8 @@ st.set_page_config(
 # =========================================================
 # BANCO DE DADOS NA NUVEM (POSTGRESQL - NEON.TECH)
 # =========================================================
-CONNECTION_STRING = "postgresql://neondb_owner:npg_obg1nxhT6GdK@ep-bitter-dream-aierzna8.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require"
+# Correção 1: Adicionado '+psycopg2' na string de conexão para evitar o erro de módulo.
+CONNECTION_STRING = "postgresql+psycopg2://neondb_owner:npg_obg1nxhT6GdK@ep-bitter-dream-aierzna8.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require"
 
 
 @st.cache_resource
@@ -380,11 +381,17 @@ if not st.session_state["autenticado"]:
                 "<div class='section-header'>📋 IDENTIFICAÇÃO DE USUÁRIO</div>",
                 unsafe_allow_html=True,
             )
-            login_user = st.text_input("Usuário / Login", key="login_u").strip().lower()
-            senha_user = st.text_input("Senha", type="password", key="senha_u")
-            if st.button(
-                "🔓 ENTRAR NO HUB", use_container_width=True, type="primary"
-            ):
+            
+            # Correção 2: Empacotando os inputs e o botão em um st.form para corrigir o bug de 2 cliques
+            with st.form("form_login"):
+                login_user = st.text_input("Usuário / Login", key="login_u").strip().lower()
+                senha_user = st.text_input("Senha", type="password", key="senha_u")
+                
+                submit_login = st.form_submit_button(
+                    "🔓 ENTRAR NO HUB", use_container_width=True, type="primary"
+                )
+                
+            if submit_login:
                 engine = obter_engine()
                 df_auth = pd.read_sql_query(
                     text(
@@ -404,6 +411,7 @@ if not st.session_state["autenticado"]:
                     st.rerun()
                 else:
                     st.error("Usuário ou senha incorretos.")
+                    
         with aba_cadastro:
             v_cad = st.session_state["contador_cadastro"]
             st.markdown(
